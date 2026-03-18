@@ -16,15 +16,23 @@ def fetch_price_data(ticker):
         return None
     row = data.iloc[0]
     logger.info(str(row))
+    def get_value(val):
+        if hasattr(val, 'item'):
+            return val.item()
+        elif hasattr(val, 'iloc'):
+            return val.iloc[0]
+        else:
+            return val
+
     return {
         "ticker": ticker,
         "date": row.name.date(),
-        "open": row["Open"],
-        "high": row["High"],
-        "low": row["Low"],
-        "close": row["Close"],
-        "adj_close": row.get("Adj Close", row["Close"]),
-        "volume": int(row["Volume"]),
+        "open": get_value(row["Open"]),
+        "high": get_value(row["High"]),
+        "low": get_value(row["Low"]),
+        "close": get_value(row["Close"]),
+        "adj_close": get_value(row.get("Adj Close", row["Close"])),
+        "volume": int(get_value(row["Volume"])),
         "region": "US"
     }
 
