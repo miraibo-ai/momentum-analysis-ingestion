@@ -1,0 +1,36 @@
+[project]
+name = "momentum-ops"
+version = "0.1.0"
+description = "Financial analytics and stock market automation for JP/KR markets"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "prefect>=3.0.0",
+    "pandas>=2.2.0",
+    "yfinance>=0.2.40",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0", # For PostgreSQL connectivity
+    "asyncpg>=0.29.0",        # Required for Prefect's async DB operations
+    "streamlit>=1.35.0",      # For your dashboard
+    "plotly>=5.20.0",         # For financial charts
+    "pydantic-settings>=2.2.0", # For clean environment variable management
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "black>=24.0.0",
+    "ruff>=0.3.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+managed = true
+package = false
+
+[tool.ruff]
+line-length = 88
+select = ["E", "F", "I"] # Style, Errors, and Import sorting
