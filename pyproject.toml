@@ -34,3 +34,6 @@ package = false
 [tool.ruff]
 line-length = 88
 select = ["E", "F", "I"] # Style, Errors, and Import sorting
+
+[tool.hatch.build.targets.wheel]
+packages = ["ingestion", "common"]

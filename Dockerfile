@@ -11,17 +11,14 @@ ENV UV_LINK_MODE=copy
 
 # 3. Cache dependencies: Copy only the lockfile and project metadata first
 # This layer is ONLY rebuilt if your dependencies change.
-RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
+COPY uv.lock pyproject.toml ./
+RUN uv sync --frozen --no-install-project --no-dev
 
 # 4. Copy the rest of your Miraiibo source code
 ADD . /app
 
 # 5. Final sync: Install the actual project (Miraiibo/momentum-ops)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev
 
 # 6. Set the path so 'prefect' and other tools work directly
 ENV PATH="/app/.venv/bin:$PATH"
