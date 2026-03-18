@@ -6,7 +6,7 @@ from common.database import check_health, get_connection
 
 load_dotenv()
 
-DEFAULT_TICKER = "AAPL"
+DEFAULT_TICKER = "QQQ"
 
 @task
 def fetch_price_data(ticker):
