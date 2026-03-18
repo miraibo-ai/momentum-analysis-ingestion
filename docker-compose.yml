@@ -25,7 +25,7 @@ services:
     environment:
       PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:test_pass@db:5432/prefect
       PREFECT_SERVER_API_HOST: 0.0.0.0
-      PREFECT_SERVER_UI_API_URL: http://172.27.100.1:4200/api
+      PREFECT_SERVER_UI_API_URL: http://172.27.100.200:4200/api
       PREFECT_API_SERVICES_LIFESPAN_TIMEOUT: 100
     command: prefect server start
     healthcheck:
