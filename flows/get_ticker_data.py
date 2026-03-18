@@ -2,7 +2,7 @@ import yfinance as yf
 from dotenv import load_dotenv
 from prefect import flow, get_run_logger, task
 
-from common.database import get_connection, check_health
+from common.database import check_health, get_connection
 
 load_dotenv()
 
@@ -14,19 +14,20 @@ def fetch_price_data(ticker):
     data = yf.download(ticker, period="5d")
     if data.empty:
         return None
-    row = data.iloc[0]
-    logger.info(str(row))
-    return {
-        "ticker": ticker,
-        "date": row.name.date(),
-        "open": row["Open"],
-        "high": row["High"],
-        "low": row["Low"],
-        "close": row["Close"],
-        "adj_close": row.get("Adj Close", row["Close"]),
-        "volume": int(row["Volume"]),
-        "region": "US"
-    }
+    row = data
+    logger.info(str(row.shape))
+    # return {
+    #     "ticker": ticker,
+    #     "date": row.name.date(),
+    #     "open": row["Open"],
+    #     "high": row["High"],
+    #     "low": row["Low"],
+    #     "close": row["Close"],
+    #     "adj_close": row.get("Adj Close", row["Close"]),
+    #     "volume": int(row["Volume"]),
+    #     "region": "US"
+    # }
+    return None
 
 @task
 def save_to_db(price_data):
