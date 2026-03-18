@@ -15,7 +15,7 @@ def fetch_price_data(ticker):
     if data.empty:
         return None
     row = data
-    logger.info(str(row.shape))
+    logger.info(str(row))
     # return {
     #     "ticker": ticker,
     #     "date": row.name.date(),
