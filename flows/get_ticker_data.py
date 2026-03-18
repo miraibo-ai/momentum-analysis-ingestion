@@ -23,7 +23,7 @@ def fetch_price_data(ticker):
         "high": row["High"],
         "low": row["Low"],
         "close": row["Close"],
-        "adj_close": row["Adj Close"],
+        "adj_close": row.get("Adj Close", row["Close"]),
         "volume": int(row["Volume"]),
         "region": "US"
     }
