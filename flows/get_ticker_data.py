@@ -11,7 +11,7 @@ DEFAULT_TICKER = "AAPL"
 @task
 def fetch_price_data(ticker):
     logger = get_run_logger()
-    data = yf.download(ticker, period="1d")
+    data = yf.download(ticker, period="5d")
     if data.empty:
         return None
     row = data.iloc[0]
