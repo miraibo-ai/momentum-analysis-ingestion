@@ -1,4 +1,4 @@
-from prefect import flow, task
+from prefect import flow, task, get_run_logger
 import yfinance as yf
 import psycopg
 from dotenv import load_dotenv
@@ -10,10 +10,12 @@ DEFAULT_TICKER = "AAPL"
 
 @task
 def fetch_price_data(ticker):
+    logger = get_run_logger()
     data = yf.download(ticker, period="1d")
     if data.empty:
         return None
     row = data.iloc[0]
+    logger.info(str(row))
     return {
         "ticker": ticker,
         "date": row.name.date(),
@@ -54,7 +56,9 @@ def save_to_db(price_data):
 @flow
 def daily_batch():
     price_data = fetch_price_data(DEFAULT_TICKER)
-    save_to_db(price_data)
+    # save_to_db(price_data)
+    return None
+
 
 if __name__ == "__main__":
     daily_batch()
