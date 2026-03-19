@@ -52,7 +52,8 @@ def fetch_active_tickers() -> list[dict[str, str]]:
     query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(query)
-        tickers = [{"symbol": row["symbol"], "region": row["market_region"]} for row in cur.fetchall()]
+        # tickers = [{"symbol": row["symbol"], "region": row["market_region"]} for row in cur.fetchall()]
+        tickers =cur.fetchall()
     log.info("Active tickers: %d found", len(tickers))
     return tickers
 
