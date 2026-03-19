@@ -14,6 +14,7 @@ dependencies = [
     "streamlit>=1.35.0",      # For your dashboard
     "plotly>=5.20.0",         # For financial charts
     "pydantic-settings>=2.2.0", # For clean environment variable management
+    "xgboost>=3.2.0",          # For your ML models
 ]
 
 [project.optional-dependencies]
