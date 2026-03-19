@@ -29,7 +29,9 @@ from ingestion.fetcher import DataFetcher, KISFetcher
 # ML and Config Imports
 from models.features import engineer_features
 from models.models import FourModelPredictor, calculate_indicators
+from dotenv import load_dotenv
 
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Minimum daily rows before feature engineering is reliable.
