@@ -47,15 +47,21 @@ MIN_HISTORY_ROWS: int = settings.min_history_rows
     description="Query the tickers table for all rows with is_active = true.",
 )
 def fetch_active_tickers() -> list[dict[str, str]]:
-    """Return a list of active ticker dicts ({'symbol', 'region'}) from the database."""
-    log = get_run_logger()
-    query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
+    # """Return a list of active ticker dicts ({'symbol', 'region'}) from the database."""
+    # log = get_run_logger()
+    # query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
+    # with get_connection() as conn, conn.cursor() as cur:
+    #     cur.execute(query)
+    #     tickers = [{"symbol": row["symbol"], "region": row["market_region"]} for row in cur.fetchall()]
+    # log.info("Active tickers: %d found", len(tickers))
+    # return tickers
     with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(query)
-        # tickers = [{"symbol": row["symbol"], "region": row["market_region"]} for row in cur.fetchall()]
-        tickers =cur.fetchall()
-    log.info("Active tickers: %d found", len(tickers))
+        cur.execute("""
+            SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol
+        """)
+        tickers = [{"symbol": row[0], "region": row[1]} for row in cur.fetchall()]
     return tickers
+
 
 def _safe_float(value: Any) -> float | None:
     """Cast *value* to ``float``; return ``None`` for NaN / None."""
