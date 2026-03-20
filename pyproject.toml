@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "prefect>=3.6.0",
-    "pandas>=3.0.1",
+    "pandas>=2.3.3",
     "yfinance>=1.2.0",
     "sqlalchemy>=2.0.48",
     "psycopg[binary,pool]>=3.3.3", # For PostgreSQL connectivity
