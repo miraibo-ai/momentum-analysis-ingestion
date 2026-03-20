@@ -17,7 +17,6 @@ from datetime import date
 from typing import Any
 
 import pandas as pd
-from dotenv import load_dotenv
 from prefect import flow, get_run_logger, task
 from prefect.tasks import task_input_hash
 
@@ -31,13 +30,19 @@ from ingestion.fetcher import DataFetcher, KISFetcher
 from models.features import engineer_features
 from models.models import FourModelPredictor, calculate_indicators
 
-
-
 logger = logging.getLogger(__name__)
 
 # Minimum daily rows before feature engineering is reliable.
 MIN_HISTORY_ROWS: int = settings.min_history_rows
 
+
+@flow(name="daily-batch-flow", log_prints=True)
+def daily_batch_flow() -> None:
+    """Run full ingestion + inference for every active ticker."""
+    log = get_run_logger()
+    import socket
+    hostname = socket.gethostname()
+    log.info("Starting daily batch flow on host: %s", hostname)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. SHARED UTILITIES
@@ -65,13 +70,6 @@ MIN_HISTORY_ROWS: int = settings.min_history_rows
 #     if value is None or pd.isna(value):
 #         return None
 #     return float(value)
-
-@flow(name="daily-batch-flow", log_prints=True)
-def daily_batch_flow() -> None:
-    """Run full ingestion + inference for every active ticker."""
-    log = get_run_logger()
-    log.info(str(settings.db_user))
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. KIS TOKEN RENEWAL FLOW
