@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Default paths for trained artefacts — stored in model_artifacts/, NOT in
 # the models/ Python package (which gets shadowed by Docker volume mounts).
-_ARTIFACTS_DIR = settings.model_artifacts_dir
+_ARTIFACTS_DIR = Path(settings.model_artifacts_dir)
 
 # ---------------------------------------------------------------------------
 # The four targeted models that run in the single container.
