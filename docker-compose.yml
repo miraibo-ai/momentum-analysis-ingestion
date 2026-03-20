@@ -32,10 +32,12 @@ services:
       - PREFECT_API_SERVICES_LIFESPAN_TIMEOUT=100
     command: prefect server start
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:4200/api/health', timeout=1)"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
+      # Using 127.0.0.1 is more reliable than 'localhost' in some container networks
+      test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:4200/api/health', timeout=5)"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   worker:
     build:
