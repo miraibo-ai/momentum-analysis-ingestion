@@ -1,10 +1,8 @@
-# Dockerfile.worker — Prefect ingestion & ML worker
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS worker
 
 LABEL maintainer="Momentum Ops Team"
-LABEL description="Unified Worker for Ingestion and ML Inference"
 
-# 1. Environment setup
+# 1. Setup Environment
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_SYSTEM_PYTHON=1 \
@@ -12,7 +10,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /opt/momentum-ops
 
-# 2. Install system dependencies for psycopg3 and TA-Lib (if needed)
+# 2. System Dependencies (Keep this root)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
@@ -20,31 +18,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Install dependencies using uv.lock
-# This ensures the worker has the same environment as your dev machine
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
+# 3. Create User EARLY and setup directories
+RUN useradd -m -u 1000 worker && \
+    mkdir -p /opt/momentum-ops/ephemeral && \
+    chown -R worker:worker /opt/momentum-ops
 
-# 4. Copy ALL required application modules
-# Your flows require ingestion, common, AND models for inference
-COPY ingestion/ ./ingestion/
-COPY common/ ./common/
-COPY models/ ./models/
-# Add this line to copy your deployment and config scripts
-COPY *.py ./ 
-COPY README.md ./
-
-# 5. Create non-root user and ephemeral storage for KIS tokens
-RUN useradd -m -u 1000 worker \
-    && mkdir -p /opt/momentum-ops/ephemeral \
-    && chown -R worker:worker /opt/momentum-ops
-    
+# 4. Switch to Worker User for all subsequent steps
 USER worker
 
-# 6. Ensure the venv created by uv is in the PATH
+# 5. Install dependencies as 'worker'
+# This ensures .venv is created with correct permissions from the start
+COPY --chown=worker:worker pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+# 6. Copy code using --chown flag (High Efficiency)
+COPY --chown=worker:worker ingestion/ ./ingestion/
+COPY --chown=worker:worker common/ ./common/
+COPY --chown=worker:worker models/ ./models/
+COPY --chown=worker:worker *.py README.md ./
+
+# 7. Environment Path
 ENV PATH="/opt/momentum-ops/.venv/bin:$PATH"
 
-# Health check verifies the prefect installation
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
     CMD python -c "import prefect; print('ok')"
 
