@@ -395,7 +395,7 @@ def process_single_ticker(ticker: str, region: str, include_realtime: bool = Tru
     daily_df = fetch_yfinance_daily(yf_sym, period="3mo")
     if daily_df is not None and not daily_df.empty:
         upsert_daily_prices(ticker, region, daily_df)
-        # run_inference_and_persist(ticker, region, daily_df)
+        run_inference_and_persist(ticker, region, daily_df)
         verify_insertion(ticker, "price_daily")
 
     # Optional yfinance realtime fetch (e.g. for US markets)
