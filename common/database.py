@@ -21,9 +21,10 @@ import logging
 from contextlib import contextmanager
 
 import psycopg
-from config import Settings
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
+
+from .config import Settings
 
 logger = logging.getLogger(__name__)
 
