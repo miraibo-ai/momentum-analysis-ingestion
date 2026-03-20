@@ -1,49 +1,67 @@
-# Dockerfile.worker — Prefect ingestion & ML worker
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS worker
+# ─────────────────────────────────────────────────────────────────────────────
+# Dockerfile.worker — Prefect ingestion worker
+#
+# Installs ONLY the 'ingestion' optional-dependency group from pyproject.toml
+# using Astral's `uv` package manager, then starts a Prefect worker polling
+# the `proxmox-local-pool` work pool.
+#
+# Build:
+#   docker build -f infrastructure/docker/Dockerfile.worker -t momentum-ops:worker .
+#
+# Run:
+#   docker run --env-file .env momentum-ops:worker
+# ─────────────────────────────────────────────────────────────────────────────
 
+FROM python:3.13-slim AS base
+
+# ── Metadata ──────────────────────────────────────────────────────────────
 LABEL maintainer="Momentum Ops Team"
-LABEL description="Unified Worker for Ingestion and ML Inference"
+LABEL description="Prefect ingestion worker for momentum-ops"
 
-# 1. Environment setup
-ENV UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_SYSTEM_PYTHON=1 \
-    PYTHONUNBUFFERED=1
+# ── Environment ───────────────────────────────────────────────────────────
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    # uv: install into system Python, no venv
+    UV_SYSTEM_INSTALL=1
 
 WORKDIR /opt/momentum-ops
 
-# 2. Install system dependencies for psycopg3 and TA-Lib (if needed)
+# ── System dependencies ──────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    curl \
-    ca-certificates \
+        gcc \
+        libpq-dev \
+        curl \
+        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. Install dependencies using uv.lock
-# This ensures the worker has the same environment as your dev machine
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-install-project --no-dev
+# ── Install uv via official standalone installer ─────────────────────────
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# 4. Copy ALL required application modules
-# Your flows require ingestion, common, AND models for inference
-COPY ingestion/ ./ingestion/
-COPY common/ ./common/
-COPY models/ ./models/
-COPY README.md ./
+# ── Copy only dependency metadata first (Docker layer caching) ───────────
+COPY pyproject.toml README.md ./
 
-# 5. Create non-root user and ephemeral storage for KIS tokens
+# ── Install ONLY core + ingestion dependencies ───────────────────────────
+# --no-editable: we don't need an editable install inside a container.
+# --system: install into the base Python (no virtual env).
+RUN uv pip install --system "."
+
+# ── Copy application source ──────────────────────────────────────────────
+COPY ingestion/ ingestion/
+COPY common/ common/
+
+# ── Create non-root user ─────────────────────────────────────────────────
 RUN useradd -m -u 1000 worker \
     && mkdir -p /opt/momentum-ops/ephemeral \
     && chown -R worker:worker /opt/momentum-ops
-    
 USER worker
 
-# 6. Ensure the venv created by uv is in the PATH
-ENV PATH="/opt/momentum-ops/.venv/bin:$PATH"
-
-# Health check verifies the prefect installation
+# ── Health check (Prefect worker exposes no HTTP; just verify Python) ────
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
     CMD python -c "import prefect; print('ok')"
 
-ENTRYPOINT ["prefect", "worker", "start", "--pool", "proxmox-local-pool", "--type", "process"]
+# ── Entrypoint: start Prefect worker polling from the work pool ──────────
+# PREFECT_API_URL is set via docker-compose environment and inherited by
+# all flow-run subprocesses — no additional config step needed.
+ENTRYPOINT ["prefect", "worker", "start", \
+            "--pool", "proxmox-local-pool", \
+            "--type", "process"]
