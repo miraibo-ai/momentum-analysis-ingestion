@@ -70,7 +70,7 @@ MIN_HISTORY_ROWS: int = settings.min_history_rows
 def daily_batch_flow() -> None:
     """Run full ingestion + inference for every active ticker."""
     log = get_run_logger()
-    log.info("Done")
+    log.info(str(settings.dict()))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
