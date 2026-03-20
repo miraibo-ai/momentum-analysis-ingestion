@@ -377,8 +377,8 @@ def daily_batch_flow() -> None:
         return
 
     log.info("Daily batch cycle — %d tickers", len(tickers))
-    for t in tickers:
-        process_single_ticker(t["symbol"], t["region"], include_realtime=False)
+    # for t in tickers:
+    #     process_single_ticker(t["symbol"], t["region"], include_realtime=False)
     log.info("Daily batch cycle complete")
 
 
