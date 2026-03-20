@@ -5,7 +5,7 @@ description = "Financial analytics and stock market automation for JP/KR markets
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "prefect[docker]>=3.4.25",
+    "prefect>=3.4.25",
     "pandas>=2.3.3",
     "yfinance>=1.2.0",
     "sqlalchemy>=2.0.48",
