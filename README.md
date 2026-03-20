@@ -11,3 +11,9 @@ cd momentum-analysis-ingestion
 
 docker compose down
 docker compose up -d
+
+prefect server start
+
+python path/to/your_deployment_script.py
+
+prefect worker start --pool "vm-pool" --work-queue "market-data-ops"

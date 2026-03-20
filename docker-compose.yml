@@ -3,13 +3,13 @@ services:
     image: postgres:18-alpine
     restart: always
     environment:
-      POSTGRES_USER: prefect
-      POSTGRES_PASSWORD: test_pass
-      POSTGRES_DB: prefect
+      POSTGRES_USER: ${DB_USER:-prefect}
+      POSTGRES_PASSWORD: ${DB_PASS:-test_pass}
+      POSTGRES_DB: ${DB_NAME:-prefect}
     volumes:
       - prefect_db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U prefect"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-prefect} -d ${DB_NAME:-prefect}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -26,17 +26,12 @@ services:
     ports:
       - "4200:4200"
     environment:
-      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:test_pass@db:5432/prefect
-      PREFECT_SERVER_API_HOST: 0.0.0.0
-      PREFECT_SERVER_UI_API_URL: http://172.27.100.200:4200/api
-      PREFECT_API_SERVICES_LIFESPAN_TIMEOUT: 100
+      - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${DB_USER:-prefect}:${DB_PASS:-test_pass}@db:5432/${DB_NAME:-prefect}
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+      # Using a variable for the UI URL to avoid hardcoding your Proxmox/Local IP
+      - PREFECT_SERVER_UI_API_URL=${PREFECT_UI_URL:-http://localhost:4200/api}
+      - PREFECT_API_SERVICES_LIFESPAN_TIMEOUT=100
     command: prefect server start
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:4200/api/health', timeout=1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
 
   worker:
     build:
@@ -48,7 +43,15 @@ services:
       server:
         condition: service_healthy
     environment:
-      PREFECT_API_URL: http://server:4200/api
-    command: prefect worker start --pool vm-pool
+      - PREFECT_API_URL=http://server:4200/api
+      # Financial API Secrets
+      - KIS_APP_KEY=${KIS_APP_KEY}
+      - KIS_APP_SECRET=${KIS_APP_SECRET}
+      - KIS_TOKEN_PATH=/opt/momentum-ops/ephemeral/kis_token.json
+      # Database connection for the actual flow execution
+      - DATABASE_URL=postgresql://${DB_USER:-prefect}:${DB_PASS:-test_pass}@db:5432/${DB_NAME:-prefect}
+    # Aligned with your Proxmox local pool naming convention
+    command: prefect worker start --pool proxmox-local-pool --type process
+
 volumes:
   prefect_db:
