@@ -5,13 +5,31 @@ Fetches market data for stocks.
  
 import logging
 from datetime import datetime, timezone
+from functools import wraps
+from typing import Any, Callable
 
 import httpx
 import pandas as pd
 import pytz
 import yfinance as yf
+from common.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _yf_data_fetcher(func: Callable) -> Callable:
+    """Decorator to handle exceptions and logging for yfinance data fetching."""
+
+    @wraps(func)
+    def wrapper(self: "DataFetcher", *args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(self, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Failed to fetch {func.__name__} for {self.ticker}: {e}")
+            return None
+
+    return wrapper
+
 
 class DataFetcher:
     """Fetches market data using yfinance."""
@@ -23,40 +41,38 @@ class DataFetcher:
         """
         self.ticker = ticker
         self.yf_ticker = yf.Ticker(ticker)
+    @_yf_data_fetcher
     def fetch_realtime_data(self) -> dict | None:
         """
         Fetch current/realtime data for the ticker.
         Returns:
             Dictionary with current price data or None if failed
         """
-        try:
-            # Get latest intraday data
-            data = self.yf_ticker.history(period='1d', interval='1m')
-            if data.empty:
-                logger.warning(f"No realtime data available for {self.ticker}")
-                return None
-            latest = data.iloc[-1]
-            # yfinance returns a timezone-aware index (e.g., America/New_York).
-            # We convert it to UTC immediately to be safe for Postgres.
-            timestamp = data.index[-1].to_pydatetime()
-            if timestamp.tzinfo is None:
-                # If yfinance somehow returns a naive timestamp, force it to UTC
-                timestamp = timestamp.replace(tzinfo=timezone.utc)
-            else:
-                # Convert whatever timezone yfinance gave us (e.g. EST) to UTC
-                timestamp = timestamp.astimezone(timezone.utc)
-            return {
-                'ticker': self.ticker,
-                'timestamp': timestamp,  # <--- Now safely UTC
-                'open': float(latest['Open']),
-                'high': float(latest['High']),
-                'low': float(latest['Low']),
-                'close': float(latest['Close']),
-                'volume': int(latest['Volume'])
-            }
-        except Exception as e:
-            logger.error(f"Failed to fetch realtime data: {e}")
+        # Get latest intraday data
+        data = self.yf_ticker.history(period='1d', interval='1m')
+        if data.empty:
+            logger.warning(f"No realtime data available for {self.ticker}")
             return None
+        latest = data.iloc[-1]
+        # yfinance returns a timezone-aware index (e.g., America/New_York).
+        # We convert it to UTC immediately to be safe for Postgres.
+        timestamp = data.index[-1].to_pydatetime()
+        if timestamp.tzinfo is None:
+            # If yfinance somehow returns a naive timestamp, force it to UTC
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        else:
+            # Convert whatever timezone yfinance gave us (e.g. EST) to UTC
+            timestamp = timestamp.astimezone(timezone.utc)
+        return {
+            'ticker': self.ticker,
+            'timestamp': timestamp,  # <--- Now safely UTC
+            'open': float(latest['Open']),
+            'high': float(latest['High']),
+            'low': float(latest['Low']),
+            'close': float(latest['Close']),
+            'volume': int(latest['Volume'])
+        }
+    @_yf_data_fetcher
     def fetch_daily_data(self, period: str = "1y") -> pd.DataFrame | None:
         """
         Fetch daily historical data.
@@ -65,32 +81,25 @@ class DataFetcher:
         Returns:
             DataFrame with daily price data or None if failed
         """
-        try:
-            data = self.yf_ticker.history(period=period)
-            if data.empty:
-                logger.warning(f"No daily data available for {self.ticker}")
-                return None
-            # Reset index to make date a column
-            data = data.reset_index()
-            data['ticker'] = self.ticker
-            return data
-        except Exception as e:
-            logger.error(f"Failed to fetch daily data for {self.ticker}: {e}")
+        data = self.yf_ticker.history(period=period)
+        if data.empty:
+            logger.warning(f"No daily data available for {self.ticker}")
             return None
+        # Reset index to make date a column
+        data = data.reset_index()
+        data['ticker'] = self.ticker
+        return data
+    @_yf_data_fetcher
     def get_info(self) -> dict | None:
         """
         Get ticker information.
         Returns:
             Dictionary with ticker information or None if failed
         """
-        try:
-            return self.yf_ticker.info
-        except Exception as e:
-            logger.error(f"Failed to get info for {self.ticker}: {e}")
-            return None
+        return self.yf_ticker.info
 class KISFetcher:
     def __init__(self, api_key: str, api_secret: str, token: str):
-        self.base_url = "https://openapi.koreainvestment.com:9443"
+        self.base_url = settings.kis_api_base_url
         self.headers = {
             "Content-Type": "application/json",
             "authorization": f"Bearer {token}",
@@ -99,7 +108,7 @@ class KISFetcher:
             "tr_id": "FHKST03010200" # TR_ID strictly returns 1-minute data
         }
         self.kst_tz = pytz.timezone('Asia/Seoul')
-    def fetch_minute_data(self, ticker: str, interval_min: int = 1) -> pd.DataFrame:
+    def fetch_minute_data(self, ticker: str, interval_min: int = 1) -> pd.DataFrame | None:
         try:
             url = f"{self.base_url}/uapi/domestic-stock/v1/quotations/inquire-time-itemchartprice"
             # 1. Enforce KST for the request regardless of NAS server time
@@ -117,7 +126,7 @@ class KISFetcher:
             df = pd.DataFrame(candles)
             if df.empty:
                 logger.warning(f"No minute data returned from KIS for {ticker}")
-                return df
+                return None
             # Parse strings and apply KST timezone
             df['datetime_str'] = df['stck_bsop_date'] + df['stck_cntg_hour']
             df['timestamp'] = pd.to_datetime(df['datetime_str'], 
@@ -149,7 +158,7 @@ class KISFetcher:
             return df[['ticker', 'interval_min', 'timestamp'] + numeric_cols]
         except httpx.HTTPError as e:
             logger.error(f"HTTP error fetching KIS data for {ticker}: {e}")
-            return pd.DataFrame()
+            return None
         except Exception as e:
             logger.error(f"Unexpected error processing KIS data for {ticker}: {e}")
-            return pd.DataFrame()
+            return None
