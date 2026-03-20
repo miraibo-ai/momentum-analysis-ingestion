@@ -41,6 +41,7 @@ def daily_batch_flow() -> None:
     """Run full ingestion + inference for every active ticker."""
 
     print(settings.db_name)
+    print(settings.model_config)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
