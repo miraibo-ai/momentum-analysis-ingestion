@@ -19,12 +19,13 @@ from __future__ import annotations
 
 import logging
 from contextlib import contextmanager
+from typing import Generator
 
 import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from common.config import Settings
+from common.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,8 @@ def _get_pool() -> ConnectionPool:
     """Return the module-level pool, creating it on first call."""
     global _pool  # noqa: PLW0603
     if _pool is None:
-        logger.info("Initialising connection pool → %s@%s/%s", Settings.db_user, Settings.db_host, Settings.db_name)
-        CONN_INFO = f"postgresql://{Settings.db_user}:{Settings.db_password}@{Settings.db_host}/{Settings.db_name}"
+        logger.info("Initialising connection pool → %s@%s/%s", settings.db_user, settings.db_host, settings.db_name)
+        CONN_INFO = f"postgresql://{settings.db_user}:{settings.db_password}@{settings.db_host}/{settings.db_name}"
         _pool = ConnectionPool(
             conninfo=CONN_INFO,
             min_size=2,
