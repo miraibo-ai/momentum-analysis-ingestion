@@ -16,7 +16,7 @@ def deploy_market_ops():
     kis_token_deployment = Deployment.build_from_flow(
         flow=kis_token_renewal_flow,
         name="kis-token-daily-refresh",
-        work_queue_name="vm-pool",
+        work_queue_name="vm-pool",  # Must match the worker's pool
         schedule=CronSchedule(cron="30 8 * * 1-5", timezone="Asia/Seoul"),
     )
     kis_token_deployment.apply()
@@ -26,7 +26,7 @@ def deploy_market_ops():
     krx_morning_deployment = Deployment.build_from_flow(
         flow=krx_realtime_flow,
         name="krx-5min-ingestion-morning",
-        work_queue_name="vm-pool",
+        work_pool_name="vm-pool",
         schedule=CronSchedule(cron="*/5 9-14 * * 1-5", timezone="Asia/Seoul"),
     )
     krx_morning_deployment.apply()
@@ -35,7 +35,7 @@ def deploy_market_ops():
     krx_closing_deployment = Deployment.build_from_flow(
         flow=krx_realtime_flow,
         name="krx-5min-ingestion-closing",
-        work_queue_name="vm-pool",
+        work_pool_name="vm-pool",
         schedule=CronSchedule(cron="0,5,10,15,20,25,30 15 * * 1-5", timezone="Asia/Seoul"),
     )
     krx_closing_deployment.apply()
@@ -44,7 +44,7 @@ def deploy_market_ops():
     daily_batch_deployment = Deployment.build_from_flow(
         flow=daily_batch_flow,
         name="daily-ml-inference",
-        work_queue_name="vm-pool",
+        work_pool_name="vm-pool",
         schedule=CronSchedule(cron="0 18 * * 1-5", timezone="Asia/Seoul"),
     )
     daily_batch_deployment.apply()
