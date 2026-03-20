@@ -102,17 +102,19 @@ class Settings(BaseSettings):
         default="https://openapi.koreainvestment.com:9443",
         description="KIS Open API base URL",
     )
-    kis_token_path: str = Field(
-        default="ephemeral/token.json",
-        description="File path where the KIS access token JSON is saved",
-    )
 
     # ── Prefect ───────────────────────────────────────────────────────────
     prefect_api_url: str | None = Field(
         default=None, description="Prefect API endpoint (e.g. http://prefect:4200/api)"
     )
 
-
+    @computed_field(repr=False)  # Don't print the full path in logs
+    @property
+    def kis_token_path(self) -> Path:
+        """Return the full, environment-specific path to the KIS token JSON."""
+        # Use env_type to create a subdirectory, falling back to 'dev'
+        env_folder = self.env_type if self.env_type in {"prod", "stg"} else "dev"
+        return Path(self.artifacts_base_dir) / env_folder / "kis_token.json"
 
 
 
