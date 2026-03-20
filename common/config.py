@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import socket
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -71,15 +72,24 @@ class Settings(BaseSettings):
     default_ticker: str = Field(
         default="AAPL", description="Fallback ticker when none is specified"
     )
-    app_data_path: str = Field(
+    artifacts_base_dir: str = Field(
         default="model_artifacts",
-        description="Path to the directory containing trained XGBoost JSON artefacts",
+        description="Base directory for storing model artifacts.",
+        alias="APP_DATA_PATH",  # For backward compatibility with env var
     )
     min_history_rows: int = Field(
         default=200,
         ge=60,
         description="Minimum daily rows required for reliable feature engineering",
     )
+
+    @computed_field(repr=False)  # Don't print the full path in logs
+    @property
+    def model_artifacts_dir(self) -> Path:
+        """Return the full, environment-specific path to model artifacts."""
+        # Use env_type to create a subdirectory, falling back to 'dev'
+        env_folder = self.env_type if self.env_type in {"prod", "stg"} else "dev"
+        return Path(self.artifacts_base_dir) / env_folder / "models"
 
     # ── KIS (Korea Investment & Securities) ────────────────────────────────
     kis_app_key: str | None = Field(
@@ -102,12 +112,6 @@ class Settings(BaseSettings):
         default=None, description="Prefect API endpoint (e.g. http://prefect:4200/api)"
     )
 
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def model_artifacts_dir(self) -> str:
-        """Return the environment-specific model artifacts directory."""
-        suffix = 'prod' if self.env_type == 'prod' else 'stg'
-        return f"{self.app_data_path}/{suffix}/models"
 
 
 

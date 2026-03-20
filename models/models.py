@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import warnings
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -31,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 
 # Filter the noisy XGBoost GPU-not-found warning.
-import warnings
 warnings.filterwarnings(
     "ignore",
     message=r"\[.+\] WARNING: /__w/xgboost/xgboost/src/context.cc",
