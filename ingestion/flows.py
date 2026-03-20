@@ -162,7 +162,7 @@ def fetch_and_store_ticker(ticker: str, fetcher: KISFetcher) -> None:
         ))
 
     query = """
-        INSERT INTO kr_minute_ohlcv 
+        INSERT INTO price_minute_ohlcv_kr 
             (ticker, interval_min, timestamp, open_price, high_price, low_price, close_price, volume, accumulated_value)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (ticker, interval_min, timestamp) DO NOTHING
@@ -272,7 +272,7 @@ def upsert_daily_prices(ticker: str, region: str, df: pd.DataFrame) -> int:
 @task(name="upsert-realtime-price", retries=2, retry_delay_seconds=10)
 def upsert_realtime_price(data: dict[str, Any]) -> None:
     query = """
-        INSERT INTO price_realtime (ticker, 
+        INSERT INTO price_minute_ohlcv (ticker, 
                                     region, 
                                     timestamp, 
                                     open, 
