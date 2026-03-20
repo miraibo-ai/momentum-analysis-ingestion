@@ -106,7 +106,7 @@ class Settings(BaseSettings):
     @property
     def model_artifacts_dir(self) -> str:
         """Return the environment-specific model artifacts directory."""
-        suffix = '_prod' if self.env_type == 'prod' else '_stg'
+        suffix = 'prod' if self.env_type == 'prod' else 'stg'
         return f"{self.app_data_path}/{suffix}/models"
 
 
