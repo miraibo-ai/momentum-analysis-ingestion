@@ -33,7 +33,7 @@ services:
       - PREFECT_API_SERVICES_LIFESPAN_TIMEOUT=100
     command: prefect server start
 
-  worker:
+worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
@@ -42,15 +42,16 @@ services:
     depends_on:
       server:
         condition: service_healthy
+    volumes:
+      # Mount the current directory to the WORKDIR defined in Dockerfile.worker
+      - .:/opt/momentum-ops 
     environment:
       - PREFECT_API_URL=http://server:4200/api
-      # Financial API Secrets
       - KIS_APP_KEY=${KIS_APP_KEY}
       - KIS_APP_SECRET=${KIS_APP_SECRET}
-      - KIS_TOKEN_PATH=/opt/momentum-ops/ephemeral/kis_token.json
-      # Database connection for the actual flow execution
       - DATABASE_URL=postgresql://${DB_USER:-prefect}:${DB_PASS:-test_pass}@db:5432/${DB_NAME:-prefect}
-    # Aligned with your Proxmox local pool naming convention
+      # Ensure python can find your modules when running the script
+      - PYTHONPATH=/opt/momentum-ops
     command: prefect worker start --pool proxmox-local-pool --type process
 
 volumes:
