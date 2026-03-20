@@ -2,8 +2,8 @@
 deploy_market_flows.py
 Unified deployment for KIS/KRX market data pipelines using Prefect 2.
 """
-from prefect.deployments.base import Deployment
-from prefect.server.schemas.schedules import CronSchedule
+from prefect.deployments import Deployment
+from prefect.schedules.schedules import CronSchedule
 
 from ingestion.flows import daily_batch_flow, kis_token_renewal_flow, krx_realtime_flow
 
