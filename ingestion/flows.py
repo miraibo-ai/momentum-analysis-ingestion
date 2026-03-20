@@ -367,19 +367,19 @@ def _safe_float(value: Any) -> float | None:
 #             rt_data["region"] = region
 #             upsert_realtime_price(rt_data)
 
-# @flow(name="daily-batch-flow", log_prints=True)
-# def daily_batch_flow() -> None:
-#     """Run full ingestion + inference for every active ticker."""
-#     log = get_run_logger()
-#     tickers = fetch_active_tickers()
-#     if not tickers:
-#         log.warning("No active tickers — nothing to do")
-#         return
+@flow(name="daily-batch-flow", log_prints=True)
+def daily_batch_flow() -> None:
+    """Run full ingestion + inference for every active ticker."""
+    log = get_run_logger()
+    tickers = fetch_active_tickers()
+    if not tickers:
+        log.warning("No active tickers — nothing to do")
+        return
 
-#     log.info("Daily batch cycle — %d tickers", len(tickers))
-#     for t in tickers:
-#         process_single_ticker(t["symbol"], t["region"], include_realtime=False)
-#     log.info("Daily batch cycle complete")
+    log.info("Daily batch cycle — %d tickers", len(tickers))
+    for t in tickers:
+        process_single_ticker(t["symbol"], t["region"], include_realtime=False)
+    log.info("Daily batch cycle complete")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
