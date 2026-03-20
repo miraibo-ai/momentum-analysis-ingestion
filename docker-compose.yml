@@ -51,7 +51,14 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       PREFECT_API_URL: http://server:4200/api
-    entrypoint: prefect
-    command: worker start --pool vm-pool --type docker
+    command: >
+      sh -c "
+        echo 'Waiting for server to be healthy...'
+        while ! curl -s -f http://server:4200/api/health > /dev/null; do
+          sleep 2
+        done
+        echo 'Server is healthy. Starting worker...'
+        prefect worker start --pool vm-pool --type docker
+      "
 volumes:
   prefect_db:

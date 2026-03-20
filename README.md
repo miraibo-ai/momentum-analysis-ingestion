@@ -17,3 +17,5 @@ prefect server start
 python path/to/your_deployment_script.py
 
 prefect worker start --pool "vm-pool" --work-queue "market-data-ops"
+
+sudo docker exec netflow-puller python3 /scripts/pull_flows.py
