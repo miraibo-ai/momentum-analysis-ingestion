@@ -29,6 +29,16 @@ from models.features import (
 
 logger = logging.getLogger(__name__)
 
+
+# Filter the noisy XGBoost GPU-not-found warning.
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message=r"\[.+\] WARNING: /__w/xgboost/xgboost/src/context.cc",
+    category=UserWarning,
+)
+
+
 # Default paths for trained artefacts — stored in model_artifacts/, NOT in
 # the models/ Python package (which gets shadowed by Docker volume mounts).
 _ARTIFACTS_DIR = Path(settings.model_artifacts_dir)
