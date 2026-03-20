@@ -13,6 +13,7 @@ def deploy_market_ops():
     kis_token_renewal_flow.deploy(
         name="kis-token-daily-refresh",
         work_pool_name="vm-pool",
+        image="momentum-worker",
         schedule={"cron": "30 8 * * 1-5", "timezone": "Asia/Seoul"},
     )
 
@@ -21,6 +22,7 @@ def deploy_market_ops():
     krx_realtime_flow.deploy(
         name="krx-5min-ingestion-morning",
         work_pool_name="vm-pool",
+        image="momentum-worker",
         schedule={"cron": "*/5 9-14 * * 1-5", "timezone": "Asia/Seoul"},
     )
 
@@ -28,6 +30,7 @@ def deploy_market_ops():
     krx_realtime_flow.deploy(
         name="krx-5min-ingestion-closing",
         work_pool_name="vm-pool",
+        image="momentum-worker",
         schedule={"cron": "0,5,10,15,20,25,30 15 * * 1-5", "timezone": "Asia/Seoul"},
     )
 
@@ -35,6 +38,7 @@ def deploy_market_ops():
     daily_batch_flow.deploy(
         name="daily-ml-inference",
         work_pool_name="vm-pool",
+        image="momentum-worker",
         schedule={"cron": "0 18 * * 1-5", "timezone": "Asia/Seoul"},
     )
 
