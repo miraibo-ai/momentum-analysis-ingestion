@@ -164,7 +164,7 @@ def _compute_bollinger(
     (upper, middle, lower, pctb) — each a pd.Series.
     """
     middle = close.rolling(window=window).mean()
-    rolling_std = close.rolling(window=window).std(ddof=0)
+    rolling_std = close.rolling(window=window).std(ddof=1)
     upper = middle + num_std * rolling_std
     lower = middle - num_std * rolling_std
     # %B: position of close relative to the bands (0 = lower, 1 = upper)
@@ -282,33 +282,29 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     high: pd.Series = df["High"].astype(float)
     low: pd.Series = df["Low"].astype(float)
 
-    features = pd.DataFrame(index=df.index)
-
-    # RSI
-    features["rsi_14"] = _compute_rsi(close)
-
-    # MACD
+    # Decompose results from tuple-returning functions
     macd_line, macd_signal, macd_hist = _compute_macd(close)
-    features["macd_line"] = macd_line
-    features["macd_signal"] = macd_signal
-    features["macd_hist"] = macd_hist
-
-    # Bollinger Bands
     bb_upper, bb_middle, bb_lower, bb_pctb = _compute_bollinger(close)
-    features["bb_upper"] = bb_upper
-    features["bb_middle"] = bb_middle
-    features["bb_lower"] = bb_lower
-    features["bb_pctb"] = bb_pctb
-
-    # Lagged returns
     lag_df = _compute_lagged_returns(close)
+
+    # Use .assign() for single-column features
+    features = pd.DataFrame(index=df.index).assign(
+        rsi_14=_compute_rsi(close),
+        macd_line=macd_line,
+        macd_signal=macd_signal,
+        macd_hist=macd_hist,
+        bb_upper=bb_upper,
+        bb_middle=bb_middle,
+        bb_lower=bb_lower,
+        bb_pctb=bb_pctb,
+        atr_14=_compute_atr(high, low, close),
+        rolling_vol_20=_compute_rolling_volatility(close),
+    )
+
+    # Combine with features that produce multiple columns at once
     features = pd.concat([features, lag_df], axis=1)
 
-    # Volatility features
-    features["atr_14"] = _compute_atr(high, low, close)
-    features["rolling_vol_20"] = _compute_rolling_volatility(close)
-
-    # Enforce column order
+    # Enforce column order to guarantee model compatibility
     features = features[FEATURE_COLUMNS]
 
     logger.debug(

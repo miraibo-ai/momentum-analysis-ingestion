@@ -13,14 +13,15 @@ from __future__ import annotations
 
 import json
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional
-from common.config import settings
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 
+from common.config import settings
 from models.features import (
     FEATURE_COLUMNS,
     engineer_features,
@@ -47,6 +48,7 @@ MODEL_REGISTRY: Dict[str, str] = {
 STRATEGY_KEYS: List[str] = ["conservative", "active", "experimental"]
 
 
+@lru_cache(maxsize=1)
 def _detect_device() -> str:
     """Return 'cuda' if a usable CUDA GPU is available, else 'cpu'."""
     try:
@@ -271,33 +273,27 @@ class FourModelPredictor:
         """
         self._discover()
 
-        empty_probs: Dict[str, Optional[float]] = {k: None for k in MODEL_REGISTRY}
-        empty_contribs: Dict[str, Optional[dict]] = {k: None for k in MODEL_REGISTRY}
+        # Initialize results with None; they will be filled if models exist.
+        results: Dict[str, Optional[float]] = {k: None for k in MODEL_REGISTRY}
+        contribs: Dict[str, Optional[dict]] = {k: None for k in MODEL_REGISTRY}
 
         # Feature engineering: ONCE
         features = engineer_features(df)
         last_valid = features.dropna()
         if last_valid.empty:
             logger.warning("Cannot compute features — not enough history")
-            return empty_probs, empty_contribs
+            return results, contribs
 
         row = last_valid.tail(1)
 
-        results: Dict[str, Optional[float]] = {}
-        contribs: Dict[str, Optional[dict]] = {}
-        for key in MODEL_REGISTRY:
-            predictor = self._predictors.get(key)
-            if predictor is None:
-                results[key] = None
-                contribs[key] = None
-                continue
+        # Iterate over only the successfully loaded predictors
+        for key, predictor in self._predictors.items():
             try:
                 results[key] = predictor.predict_proba(row)
                 contribs[key] = predictor.local_contributions(row)
                 logger.debug("  %s  P(up) = %.4f", key, results[key])
             except Exception as exc:
                 logger.error("Prediction failed for '%s': %s", key, exc)
-                results[key] = None
-                contribs[key] = None
+                # Value for this key will remain None
 
         return results, contribs
