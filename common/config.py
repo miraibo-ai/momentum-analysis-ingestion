@@ -36,11 +36,11 @@ class Settings(BaseSettings):
     env_type: str = socket.gethostname().split('-')[-1]
 
     # ── PostgreSQL ────────────────────────────────────────────────────────
-    db_host: str = Field(default="localhost", description="Postgres hostname")
-    db_port: int = Field(default=5432, description="Postgres port")
-    db_name_base: str = Field(default="momentum_db", description="Base Postgres database name")
-    db_user: str = Field(default="momentum_user", description="Postgres user")
-    db_password: str = Field(default="momentum_password", description="Postgres password")
+    # db_host: str = Field(default="localhost", description="Postgres hostname")
+    # db_port: int = Field(default=5432, description="Postgres port")
+    # db_name_base: str = Field(default="momentum_db", description="Base Postgres database name")
+    # db_user: str = Field(default="momentum_user", description="Postgres user")
+    # db_password: str = Field(default="momentum_password", description="Postgres password")
 
     @computed_field  # type: ignore[prop-decorator]
     @property
