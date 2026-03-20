@@ -35,41 +35,32 @@ logger = logging.getLogger(__name__)
 # Minimum daily rows before feature engineering is reliable.
 MIN_HISTORY_ROWS: int = settings.min_history_rows
 
-
-@flow(name="daily-batch-flow", log_prints=True)
-def daily_batch_flow() -> None:
-    """Run full ingestion + inference for every active ticker."""
-
-    print(settings.db_name)
-    print(settings.model_config)
-
-
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. SHARED UTILITIES
 # ──────────────────────────────────────────────────────────────────────────────
 
-# @task(
-#     name="fetch-active-tickers",
-#     retries=2,
-#     retry_delay_seconds=10,
-#     description="Query the tickers table for all rows with is_active = true.",
-# )
-# def fetch_active_tickers() -> list[dict[str, str]]:
-#     """Return a list of active ticker dicts ({'symbol', 'region'}) from the database."""
-#     log = get_run_logger()
-#     query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
-#     with get_connection() as conn, conn.cursor() as cur:
-#         cur.execute(query)
-#         tickers = [{"symbol": row["symbol"], "region": row["market_region"]} for row in cur.fetchall()]
-#     log.info("Active tickers: %d found", len(tickers))
-#     return tickers
+@task(
+    name="fetch-active-tickers",
+    retries=2,
+    retry_delay_seconds=10,
+    description="Query the tickers table for all rows with is_active = true.",
+)
+def fetch_active_tickers() -> list[dict[str, str]]:
+    """Return a list of active ticker dicts ({'symbol', 'region'}) from the database."""
+    log = get_run_logger()
+    query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(query)
+        tickers = [{"symbol": row["symbol"], "region": row["market_region"]} for row in cur.fetchall()]
+    log.info("Active tickers: %d found", len(tickers))
+    return tickers
 
 
-# def _safe_float(value: Any) -> float | None:
-#     """Cast *value* to ``float``; return ``None`` for NaN / None."""
-#     if value is None or pd.isna(value):
-#         return None
-#     return float(value)
+def _safe_float(value: Any) -> float | None:
+    """Cast *value* to ``float``; return ``None`` for NaN / None."""
+    if value is None or pd.isna(value):
+        return None
+    return float(value)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. KIS TOKEN RENEWAL FLOW
