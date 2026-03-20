@@ -11,9 +11,9 @@ dependencies = [
     "sqlalchemy>=2.0.48",
     "psycopg[binary,pool]>=3.3.3", # For PostgreSQL connectivity
     "asyncpg>=0.29.0",        # Required for Prefect's async DB operations
-    "streamlit>=1.35.0",      # For your dashboard
-    "plotly>=5.20.0",         # For financial charts
-    "pydantic-settings>=2.2.0", # For clean environment variable management
+    "streamlit>=1.55.0",      # For your dashboard
+    "plotly>=6.6.0",         # For financial charts
+    "pydantic-settings>=2.13.1", # For clean environment variable management
     "xgboost>=3.2.0",          # For your ML models
     "scikit-learn>=1.8.0",     # For additional ML utilities
 ]
