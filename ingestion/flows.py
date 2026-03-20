@@ -14,7 +14,7 @@ import json
 import logging
 import pathlib
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 from prefect import flow, get_run_logger, task
@@ -51,9 +51,11 @@ def fetch_active_tickers() -> list[dict[str, str]]:
     query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
     with get_connection() as conn, conn.cursor() as cur:
         cur.execute(query)
+        # Tell Pylance the row is a dict, since it can't infer the `dict_row` factory
+        fetched_rows = cast(list[dict[str, Any]], cur.fetchall())
         tickers = [
-            {"symbol": row[0], "region": row[1]}
-            for row in cur.fetchall()
+            {"symbol": row["symbol"], "region": row["market_region"]}
+            for row in fetched_rows
         ]
     log.info("Active tickers: %d found", len(tickers))
     return tickers
@@ -207,168 +209,202 @@ def _safe_float(value: Any) -> float | None:
 # 4. DAILY BATCH FLOW (YFinance + ML Inference)
 # ──────────────────────────────────────────────────────────────────────────────
 
-# @task(name="fetch-yfinance-daily", retries=3, retry_delay_seconds=30, cache_key_fn=task_input_hash, cache_expiration=pd.Timedelta(hours=1))
-# def fetch_yfinance_daily(yf_symbol: str, period: str = "3mo") -> pd.DataFrame | None:
-#     log = get_run_logger()
-#     fetcher = DataFetcher(yf_symbol)
-#     df = fetcher.fetch_daily_data(period=period)
-#     if df is None or df.empty:
-#         log.warning("No daily data returned for %s", yf_symbol)
-#         return None
-#     return df
+@task(name="fetch-yfinance-daily", 
+      retries=3, 
+      retry_delay_seconds=30, 
+      cache_key_fn=task_input_hash, 
+      cache_expiration=pd.Timedelta(hours=1))
+def fetch_yfinance_daily(yf_symbol: str, period: str = "3mo") -> pd.DataFrame | None:
+    log = get_run_logger()
+    fetcher = DataFetcher(yf_symbol)
+    df = fetcher.fetch_daily_data(period=period)
+    if df is None or df.empty:
+        log.warning("No daily data returned for %s", yf_symbol)
+        return None
+    return df
 
-# @task(name="fetch-yfinance-realtime", retries=2, retry_delay_seconds=15)
-# def fetch_yfinance_realtime(yf_symbol: str) -> dict[str, Any] | None:
-#     log = get_run_logger()
-#     data = DataFetcher(yf_symbol).fetch_realtime_data()
-#     if data is None:
-#         log.warning("No realtime data for %s", yf_symbol)
-#     return data
+@task(name="fetch-yfinance-realtime", retries=2, retry_delay_seconds=15)
+def fetch_yfinance_realtime(yf_symbol: str) -> dict[str, Any] | None:
+    log = get_run_logger()
+    data = DataFetcher(yf_symbol).fetch_realtime_data()
+    if data is None:
+        log.warning("No realtime data for %s", yf_symbol)
+    return data
 
-# @task(name="upsert-daily-prices", retries=2, retry_delay_seconds=10)
-# def upsert_daily_prices(ticker: str, region: str, df: pd.DataFrame) -> int:
-#     log = get_run_logger()
-#     rows = [
-#         (ticker, region, r["Date"].date(), float(r["Open"]), float(r["High"]),
-#          float(r["Low"]), float(r["Close"]), float(r["Close"]), int(r["Volume"]))
-#         for _, r in df.iterrows()
-#     ]
-#     query = """
-#         INSERT INTO price_daily (ticker, region, date, open, high, low, close, adj_close, volume)
-#         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-#         ON CONFLICT (ticker, date) DO UPDATE SET
-#             region = EXCLUDED.region, open = EXCLUDED.open, high = EXCLUDED.high,
-#             low = EXCLUDED.low, close = EXCLUDED.close, adj_close = EXCLUDED.adj_close, volume = EXCLUDED.volume
-#     """
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.executemany(query, rows)
-#             row_count = cur.rowcount
-#         conn.commit()
+@task(name="upsert-daily-prices", retries=2, retry_delay_seconds=10)
+def upsert_daily_prices(ticker: str, region: str, df: pd.DataFrame) -> int:
+    log = get_run_logger()
+    rows = [
+        (ticker, region, r["Date"].date(), float(r["Open"]), float(r["High"]),
+         float(r["Low"]), float(r["Close"]), float(r["Close"]), int(r["Volume"]))
+        for _, r in df.iterrows()
+    ]
+    query = """
+        INSERT INTO price_daily (ticker, 
+                                region, 
+                                date, 
+                                open, 
+                                high, 
+                                low, 
+                                close, 
+                                adj_close, 
+                                volume)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (ticker, date) DO UPDATE SET
+            region = EXCLUDED.region, 
+            open = EXCLUDED.open, 
+            high = EXCLUDED.high,
+            low = EXCLUDED.low, 
+            close = EXCLUDED.close, 
+            adj_close = EXCLUDED.adj_close, 
+            volume = EXCLUDED.volume
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(query, rows)
+            row_count = cur.rowcount
+        conn.commit()
 
-#     if row_count == 0:
-#         log.warning(f"{ticker}: Database reported 0 rows affected during daily upsert.")
-#     return row_count
+    if row_count == 0:
+        log.warning(f"{ticker}: Database reported 0 rows affected during daily upsert.")
+    return row_count
 
-# @task(name="upsert-realtime-price", retries=2, retry_delay_seconds=10)
-# def upsert_realtime_price(data: dict[str, Any]) -> None:
-#     query = """
-#         INSERT INTO price_realtime (ticker, region, timestamp, open, high, low, close, volume)
-#         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-#         ON CONFLICT (ticker, timestamp) DO UPDATE SET
-#             region = EXCLUDED.region, open = EXCLUDED.open, high = EXCLUDED.high,
-#             low = EXCLUDED.low, close = EXCLUDED.close, volume = EXCLUDED.volume
-#     """
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute(query, (data["ticker"], data["region"], data["timestamp"], 
-#                                 data["open"], data["high"], data["low"], data["close"], data["volume"]))
-#         conn.commit()
+@task(name="upsert-realtime-price", retries=2, retry_delay_seconds=10)
+def upsert_realtime_price(data: dict[str, Any]) -> None:
+    query = """
+        INSERT INTO price_realtime (ticker, 
+                                    region, 
+                                    timestamp, 
+                                    open, 
+                                    high, 
+                                    low, 
+                                    close, 
+                                    volume)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (ticker, timestamp) DO UPDATE SET
+            region = EXCLUDED.region, 
+            open = EXCLUDED.open, 
+            high = EXCLUDED.high,
+            low = EXCLUDED.low, 
+            close = EXCLUDED.close, 
+            volume = EXCLUDED.volume
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (data["ticker"], 
+                                data["region"], 
+                                data["timestamp"], 
+                                data["open"], 
+                                data["high"], 
+                                data["low"], 
+                                data["close"], 
+                                data["volume"]))
+        conn.commit()
 
-# @task(name="backfill-if-needed", retries=2, retry_delay_seconds=30)
-# def backfill_if_needed(ticker: str, region: str, yf_symbol: str) -> None:
-#     log = get_run_logger()
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute("SELECT COUNT(*) AS cnt FROM price_daily WHERE ticker = %s", (ticker,))
-#             row = cur.fetchone()
-#             existing: int = row["cnt"] if row else 0
+@task(name="backfill-if-needed", retries=2, retry_delay_seconds=30)
+def backfill_if_needed(ticker: str, region: str, yf_symbol: str) -> None:
+    log = get_run_logger()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS cnt FROM price_daily WHERE ticker = %s", (ticker,))
+            row = cast(dict[str, Any] | None, cur.fetchone())
+            existing: int = row["cnt"] if row else 0
 
-#     if existing < MIN_HISTORY_ROWS:
-#         log.info("%s has %d rows (need %d) — backfilling max history", ticker, existing, MIN_HISTORY_ROWS)
-#         full_df = fetch_yfinance_daily.fn(yf_symbol, period="max")
-#         if full_df is not None and not full_df.empty:
-#             upsert_daily_prices.fn(ticker, region, full_df)
+    if existing < MIN_HISTORY_ROWS:
+        log.info("%s has %d rows (need %d) — backfilling max history", ticker, existing, MIN_HISTORY_ROWS)
+        full_df = fetch_yfinance_daily.fn(yf_symbol, period="max")
+        if full_df is not None and not full_df.empty:
+            upsert_daily_prices.fn(ticker, region, full_df)
 
-# @task(name="run-inference-and-persist", retries=1, retry_delay_seconds=5)
-# def run_inference_and_persist(ticker: str, region: str, daily_df: pd.DataFrame) -> None:
-#     log = get_run_logger()
-#     features = engineer_features(daily_df)
-#     indicators = calculate_indicators(daily_df)
+@task(name="run-inference-and-persist", retries=1, retry_delay_seconds=5)
+def run_inference_and_persist(ticker: str, region: str, daily_df: pd.DataFrame) -> None:
+    log = get_run_logger()
+    features = engineer_features(daily_df)
+    indicators = calculate_indicators(daily_df)
 
-#     if indicators.empty:
-#         log.warning("%s — indicators are empty; skipping analysis upsert", ticker)
-#         return
+    if indicators.empty:
+        log.warning("%s — indicators are empty; skipping analysis upsert", ticker)
+        return
 
-#     predictor = FourModelPredictor()
-#     model_probs, model_contribs = predictor.predict_from_ohlcv(daily_df)
+    predictor = FourModelPredictor()
+    model_probs, model_contribs = predictor.predict_from_ohlcv(daily_df)
 
-#     def _contrib_json(key: str) -> str | None:
-#         c = model_contribs.get(key)
-#         return json.dumps(c) if c else None
+    def _contrib_json(key: str) -> str | None:
+        c = model_contribs.get(key)
+        return json.dumps(c) if c else None
 
-#     latest_idx = indicators.index[-1]
-#     latest_date: date = daily_df.loc[latest_idx, "Date"].date()
-#     latest_features = features.loc[latest_idx] if latest_idx in features.index else None
+    latest_idx = indicators.index[-1]
+    latest_date: date = cast(pd.Timestamp, daily_df.loc[latest_idx, "Date"]).date()
+    latest_features = features.loc[latest_idx] if latest_idx in features.index else None
 
-#     query = """
-#         INSERT INTO analysis_info (
-#             ticker, region, date, rsi, macd, macd_signal, macd_hist,
-#             bb_upper, bb_middle, bb_lower, prob_active_1w, prob_conservative_1mo,
-#             prob_conservative_6mo, prob_experimental, features_active_1w,
-#             features_conservative_1mo, features_conservative_6mo, features_experimental
-#         ) VALUES (
-#             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-#         )
-#         ON CONFLICT (ticker, date) DO UPDATE SET
-#             region = EXCLUDED.region, rsi = EXCLUDED.rsi, macd = EXCLUDED.macd,
-#             macd_signal = EXCLUDED.macd_signal, macd_hist = EXCLUDED.macd_hist,
-#             bb_upper = EXCLUDED.bb_upper, bb_middle = EXCLUDED.bb_middle, bb_lower = EXCLUDED.bb_lower,
-#             prob_active_1w = EXCLUDED.prob_active_1w, prob_conservative_1mo = EXCLUDED.prob_conservative_1mo,
-#             prob_conservative_6mo = EXCLUDED.prob_conservative_6mo, prob_experimental = EXCLUDED.prob_experimental,
-#             features_active_1w = EXCLUDED.features_active_1w, features_conservative_1mo = EXCLUDED.features_conservative_1mo,
-#             features_conservative_6mo = EXCLUDED.features_conservative_6mo, features_experimental = EXCLUDED.features_experimental
-#     """
-#     params = (
-#         ticker, region, latest_date,
-#         _safe_float(indicators.loc[latest_idx, "RSI"]) if "RSI" in indicators.columns else None,
-#         _safe_float(indicators.loc[latest_idx, "MACD"]) if "MACD" in indicators.columns else None,
-#         _safe_float(indicators.loc[latest_idx, "MACD_signal"]) if "MACD_signal" in indicators.columns else None,
-#         _safe_float(indicators.loc[latest_idx, "MACD_hist"]) if "MACD_hist" in indicators.columns else None,
-#         _safe_float(latest_features["bb_upper"]) if latest_features is not None else None,
-#         _safe_float(latest_features["bb_middle"]) if latest_features is not None else None,
-#         _safe_float(latest_features["bb_lower"]) if latest_features is not None else None,
-#         model_probs.get("active_1w"), model_probs.get("conservative_1mo"),
-#         model_probs.get("conservative_6mo"), model_probs.get("experimental"),
-#         _contrib_json("active_1w"), _contrib_json("conservative_1mo"),
-#         _contrib_json("conservative_6mo"), _contrib_json("experimental"),
-#     )
+    query = """
+        INSERT INTO analysis_info (
+            ticker, region, date, rsi, macd, macd_signal, macd_hist,
+            bb_upper, bb_middle, bb_lower, prob_active_1w, prob_conservative_1mo,
+            prob_conservative_6mo, prob_experimental, features_active_1w,
+            features_conservative_1mo, features_conservative_6mo, features_experimental
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (ticker, date) DO UPDATE SET
+            region = EXCLUDED.region, rsi = EXCLUDED.rsi, macd = EXCLUDED.macd,
+            macd_signal = EXCLUDED.macd_signal, macd_hist = EXCLUDED.macd_hist,
+            bb_upper = EXCLUDED.bb_upper, bb_middle = EXCLUDED.bb_middle, bb_lower = EXCLUDED.bb_lower,
+            prob_active_1w = EXCLUDED.prob_active_1w, prob_conservative_1mo = EXCLUDED.prob_conservative_1mo,
+            prob_conservative_6mo = EXCLUDED.prob_conservative_6mo, prob_experimental = EXCLUDED.prob_experimental,
+            features_active_1w = EXCLUDED.features_active_1w, features_conservative_1mo = EXCLUDED.features_conservative_1mo,
+            features_conservative_6mo = EXCLUDED.features_conservative_6mo, features_experimental = EXCLUDED.features_experimental
+    """
+    params = (
+        ticker, region, latest_date,
+        _safe_float(indicators.loc[latest_idx, "RSI"]) if "RSI" in indicators.columns else None,
+        _safe_float(indicators.loc[latest_idx, "MACD"]) if "MACD" in indicators.columns else None,
+        _safe_float(indicators.loc[latest_idx, "MACD_signal"]) if "MACD_signal" in indicators.columns else None,
+        _safe_float(indicators.loc[latest_idx, "MACD_hist"]) if "MACD_hist" in indicators.columns else None,
+        _safe_float(latest_features["bb_upper"]) if latest_features is not None else None,
+        _safe_float(latest_features["bb_middle"]) if latest_features is not None else None,
+        _safe_float(latest_features["bb_lower"]) if latest_features is not None else None,
+        model_probs.get("active_1w"), model_probs.get("conservative_1mo"),
+        model_probs.get("conservative_6mo"), model_probs.get("experimental"),
+        _contrib_json("active_1w"), _contrib_json("conservative_1mo"),
+        _contrib_json("conservative_6mo"), _contrib_json("experimental"),
+    )
 
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute(query, params)
-#         conn.commit()
-#     log.info("%s — analysis row persisted for %s", ticker, latest_date)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+        conn.commit()
+    log.info("%s — analysis row persisted for %s", ticker, latest_date)
 
-# @task(name="verify_insertion")
-# def verify_insertion(ticker: str, table: str):
-#     log = get_run_logger()
-#     query = f"SELECT MAX(date) FROM {table} WHERE ticker = %s"
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute(query, (ticker,))
-#             res = cur.fetchone()
-#             log.info(f"Latest record in {table} for {ticker}: {res}")
+@task(name="verify_insertion")
+def verify_insertion(ticker: str, table: str):
+    log = get_run_logger()
+    query = f"SELECT MAX(date) FROM {table} WHERE ticker = %s"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (ticker,))
+            res = cur.fetchone()
+            log.info(f"Latest record in {table} for {ticker}: {res}")
 
-# @flow(name="process-single-ticker", log_prints=True, retries=1, retry_delay_seconds=30)
-# def process_single_ticker(ticker: str, region: str, include_realtime: bool = True) -> None:
-#     yf_sym = to_yf_symbol(ticker, region)
+@flow(name="process-single-ticker", log_prints=True, retries=1, retry_delay_seconds=30)
+def process_single_ticker(ticker: str, region: str, include_realtime: bool = True) -> None:
+    yf_sym = to_yf_symbol(ticker, region)
 
-#     backfill_if_needed(ticker, region, yf_sym)
+    backfill_if_needed(ticker, region, yf_sym)
 
-#     daily_df = fetch_yfinance_daily(yf_sym, period="3mo")
-#     if daily_df is not None and not daily_df.empty:
-#         upsert_daily_prices(ticker, region, daily_df)
-#         # run_inference_and_persist(ticker, region, daily_df)
-#         verify_insertion(ticker, "price_daily")
+    daily_df = fetch_yfinance_daily(yf_sym, period="3mo")
+    if daily_df is not None and not daily_df.empty:
+        upsert_daily_prices(ticker, region, daily_df)
+        # run_inference_and_persist(ticker, region, daily_df)
+        verify_insertion(ticker, "price_daily")
 
-#     # Optional yfinance realtime fetch (e.g. for US markets)
-#     if include_realtime:
-#         rt_data = fetch_yfinance_realtime(yf_sym)
-#         if rt_data is not None:
-#             rt_data["ticker"] = ticker
-#             rt_data["region"] = region
-#             upsert_realtime_price(rt_data)
+    # Optional yfinance realtime fetch (e.g. for US markets)
+    if include_realtime:
+        rt_data = fetch_yfinance_realtime(yf_sym)
+        if rt_data is not None:
+            rt_data["ticker"] = ticker
+            rt_data["region"] = region
+            upsert_realtime_price(rt_data)
 
 @flow(name="daily-batch-flow", log_prints=True)
 def daily_batch_flow() -> None:
@@ -380,8 +416,8 @@ def daily_batch_flow() -> None:
         return
 
     log.info("Daily batch cycle — %d tickers", len(tickers))
-    # for t in tickers:
-    #     process_single_ticker(t["symbol"], t["region"], include_realtime=False)
+    for t in tickers:
+        process_single_ticker(t["symbol"], t["region"], include_realtime=False)
     log.info("Daily batch cycle complete")
 
 

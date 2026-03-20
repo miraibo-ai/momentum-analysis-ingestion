@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     default_ticker: str = Field(
         default="AAPL", description="Fallback ticker when none is specified"
     )
-    model_artifacts_dir: str = Field(
+    app_data_path: str = Field(
         default="model_artifacts",
         description="Path to the directory containing trained XGBoost JSON artefacts",
     )
@@ -101,6 +101,15 @@ class Settings(BaseSettings):
     prefect_api_url: str | None = Field(
         default=None, description="Prefect API endpoint (e.g. http://prefect:4200/api)"
     )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def model_artifacts_dir(self) -> str:
+        """Return the environment-specific model artifacts directory."""
+        suffix = '_prod' if self.env_type == 'prod' else '_stg'
+        return f"{self.app_data_path}/{suffix}/models"
+
+
 
 
 @lru_cache(maxsize=1)
