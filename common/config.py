@@ -15,8 +15,8 @@ Usage
 
 from __future__ import annotations
 
+import socket
 from functools import lru_cache
-from typing import Optional
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,12 +32,22 @@ class Settings(BaseSettings):
         case_sensitive=False,    # DB_HOST == db_host
     )
 
+    
+    env_type: str = socket.gethostname().split('-')[-1]
+
     # ── PostgreSQL ────────────────────────────────────────────────────────
     db_host: str = Field(default="localhost", description="Postgres hostname")
     db_port: int = Field(default=5432, description="Postgres port")
-    db_name: str = Field(default="momentum_db", description="Postgres database name")
+    db_name_base: str = Field(default="momentum_db", description="Base Postgres database name")
     db_user: str = Field(default="momentum_user", description="Postgres user")
     db_password: str = Field(default="momentum_password", description="Postgres password")
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def db_name(self) -> str:
+        """Return the environment-specific database name."""
+        suffix = '_prod' if self.env_type == 'prod' else '_stg'
+        return f"{self.db_name_base}{suffix}"
 
     # ── Computed DSN (read-only) ──────────────────────────────────────────
     @computed_field  # type: ignore[prop-decorator]
@@ -50,10 +60,10 @@ class Settings(BaseSettings):
         )
 
     # ── API keys (optional — populated when needed) ───────────────────────
-    fmp_api_key: Optional[str] = Field(
+    fmp_api_key: str | None = Field(
         default=None, description="Financial Modeling Prep API key"
     )
-    openai_api_key: Optional[str] = Field(
+    openai_api_key: str | None = Field(
         default=None, description="OpenAI API key for advisory features"
     )
 
@@ -72,10 +82,10 @@ class Settings(BaseSettings):
     )
 
     # ── KIS (Korea Investment & Securities) ────────────────────────────────
-    kis_app_key: Optional[str] = Field(
+    kis_app_key: str | None = Field(
         default=None, description="KIS Open API application key"
     )
-    kis_app_secret: Optional[str] = Field(
+    kis_app_secret: str | None = Field(
         default=None, description="KIS Open API application secret"
     )
     kis_api_base_url: str = Field(
@@ -88,7 +98,7 @@ class Settings(BaseSettings):
     )
 
     # ── Prefect ───────────────────────────────────────────────────────────
-    prefect_api_url: Optional[str] = Field(
+    prefect_api_url: str | None = Field(
         default=None, description="Prefect API endpoint (e.g. http://prefect:4200/api)"
     )
 

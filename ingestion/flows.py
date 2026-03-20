@@ -39,10 +39,9 @@ MIN_HISTORY_ROWS: int = settings.min_history_rows
 @flow(name="daily-batch-flow", log_prints=True)
 def daily_batch_flow() -> None:
     """Run full ingestion + inference for every active ticker."""
-    log = get_run_logger()
-    import socket
-    hostname = socket.gethostname()
-    log.info("Starting daily batch flow on host: %s", hostname)
+
+    print(settings.db_name)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. SHARED UTILITIES
