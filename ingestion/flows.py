@@ -31,7 +31,8 @@ from ingestion.fetcher import DataFetcher, KISFetcher
 from models.features import engineer_features
 from models.models import FourModelPredictor, calculate_indicators
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
+config = dotenv_values()
 load_dotenv()
 
 
@@ -73,7 +74,7 @@ def daily_batch_flow() -> None:
     """Run full ingestion + inference for every active ticker."""
     log = get_run_logger()
 
-    log.info("Daily batch cycle complete")
+    log.info(str(config))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
