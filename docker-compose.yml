@@ -28,16 +28,10 @@ services:
     environment:
       - PREFECT_API_DATABASE_CONNECTION_URL=postgresql+asyncpg://${DB_USER:-prefect}:${DB_PASS:-test_pass}@db:5432/${DB_NAME:-prefect}
       - PREFECT_SERVER_API_HOST=0.0.0.0
+      # Using a variable for the UI URL to avoid hardcoding your Proxmox/Local IP
       - PREFECT_SERVER_UI_API_URL=${PREFECT_UI_URL:-http://localhost:4200/api}
       - PREFECT_API_SERVICES_LIFESPAN_TIMEOUT=100
     command: prefect server start
-    healthcheck:
-      # Using 127.0.0.1 is more reliable than 'localhost' in some container networks
-      test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:4200/api/health', timeout=5)"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   worker:
     build:
@@ -45,18 +39,18 @@ services:
       dockerfile: Dockerfile.worker
     image: momentum-worker
     restart: always
-    working_dir: /opt/momentum-ops
     depends_on:
       server:
         condition: service_healthy
-    volumes:
-      - .:/opt/momentum-ops
     environment:
       - PREFECT_API_URL=http://server:4200/api
+      # Financial API Secrets
       - KIS_APP_KEY=${KIS_APP_KEY}
       - KIS_APP_SECRET=${KIS_APP_SECRET}
+      - KIS_TOKEN_PATH=/opt/momentum-ops/ephemeral/kis_token.json
+      # Database connection for the actual flow execution
       - DATABASE_URL=postgresql://${DB_USER:-prefect}:${DB_PASS:-test_pass}@db:5432/${DB_NAME:-prefect}
-      - PYTHONPATH=/opt/momentum-ops
+    # Aligned with your Proxmox local pool naming convention
     command: prefect worker start --pool proxmox-local-pool --type process
 
 volumes:
