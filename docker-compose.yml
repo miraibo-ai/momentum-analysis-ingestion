@@ -47,9 +47,11 @@ services:
     depends_on:
       server:
         condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     environment:
       PREFECT_API_URL: http://server:4200/api
     entrypoint: prefect
-    command: worker start --pool vm-pool --type process
+    command: worker start --pool vm-pool --type docker
 volumes:
   prefect_db:
