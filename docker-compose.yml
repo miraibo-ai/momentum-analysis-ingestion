@@ -37,20 +37,19 @@ worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
-    image: momentum-worker
+    image: momentum-worker:latest # Versioning helps avoid cache confusion
     restart: always
+    working_dir: /opt/momentum-ops  # Force the working directory
     depends_on:
       server:
         condition: service_healthy
     volumes:
-      # Mount the current directory to the WORKDIR defined in Dockerfile.worker
-      - .:/opt/momentum-ops 
+      - .:/opt/momentum-ops        # Mount local code for easy stg updates
     environment:
       - PREFECT_API_URL=http://server:4200/api
       - KIS_APP_KEY=${KIS_APP_KEY}
       - KIS_APP_SECRET=${KIS_APP_SECRET}
       - DATABASE_URL=postgresql://${DB_USER:-prefect}:${DB_PASS:-test_pass}@db:5432/${DB_NAME:-prefect}
-      # Ensure python can find your modules when running the script
       - PYTHONPATH=/opt/momentum-ops
     command: prefect worker start --pool proxmox-local-pool --type process
 
