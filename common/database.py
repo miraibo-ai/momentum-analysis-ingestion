@@ -24,7 +24,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from .config import Settings
+from common.config import Settings
 
 logger = logging.getLogger(__name__)
 
