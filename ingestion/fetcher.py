@@ -5,7 +5,6 @@ Fetches market data for stocks.
  
 import logging
 from datetime import datetime, timezone
-from typing import Any
 
 import httpx
 import pandas as pd
@@ -24,7 +23,7 @@ class DataFetcher:
         """
         self.ticker = ticker
         self.yf_ticker = yf.Ticker(ticker)
-    def fetch_realtime_data(self) -> dict[str, Any] | None:
+    def fetch_realtime_data(self) -> dict | None:
         """
         Fetch current/realtime data for the ticker.
         Returns:
@@ -37,7 +36,6 @@ class DataFetcher:
                 logger.warning(f"No realtime data available for {self.ticker}")
                 return None
             latest = data.iloc[-1]
-            # CRITICAL FIX FOR TIMESTAMPTZ:
             # yfinance returns a timezone-aware index (e.g., America/New_York).
             # We convert it to UTC immediately to be safe for Postgres.
             timestamp = data.index[-1].to_pydatetime()
@@ -79,17 +77,17 @@ class DataFetcher:
         except Exception as e:
             logger.error(f"Failed to fetch daily data for {self.ticker}: {e}")
             return None
-    def get_info(self) -> dict[str, Any]:
+    def get_info(self) -> dict | None:
         """
         Get ticker information.
         Returns:
-            Dictionary with ticker information
+            Dictionary with ticker information or None if failed
         """
         try:
             return self.yf_ticker.info
         except Exception as e:
             logger.error(f"Failed to get info for {self.ticker}: {e}")
-            return {}
+            return None
 class KISFetcher:
     def __init__(self, api_key: str, api_secret: str, token: str):
         self.base_url = "https://openapi.koreainvestment.com:9443"
@@ -122,7 +120,8 @@ class KISFetcher:
                 return df
             # Parse strings and apply KST timezone
             df['datetime_str'] = df['stck_bsop_date'] + df['stck_cntg_hour']
-            df['timestamp'] = pd.to_datetime(df['datetime_str'], format='%Y%m%d%H%M%S').dt.tz_localize('Asia/Seoul')
+            df['timestamp'] = pd.to_datetime(df['datetime_str'], 
+                                             format='%Y%m%d%H%M%S').dt.tz_localize('Asia/Seoul')
             df = df.rename(columns={
                 'stck_oprc': 'open_price',
                 'stck_hgpr': 'high_price',
