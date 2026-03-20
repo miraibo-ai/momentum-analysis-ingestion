@@ -49,6 +49,6 @@ services:
         condition: service_healthy
     environment:
       PREFECT_API_URL: http://server:4200/api
-    command: prefect worker start --pool vm-pool
+    command: ["--pool", "vm-pool", "--type", "process"]
 volumes:
   prefect_db:
