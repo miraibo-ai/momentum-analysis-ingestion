@@ -5,10 +5,10 @@ description = "Financial analytics and stock market automation for JP/KR markets
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "prefect>=3.0.0",
-    "pandas>=2.2.0",
-    "yfinance>=0.2.40",
-    "sqlalchemy>=2.0.0",
+    "prefect>=3.6.0",
+    "pandas>=3.0.1",
+    "yfinance>=1.2.0",
+    "sqlalchemy>=2.0.48",
     "psycopg[binary,pool]>=3.3.3", # For PostgreSQL connectivity
     "asyncpg>=0.29.0",        # Required for Prefect's async DB operations
     "streamlit>=1.35.0",      # For your dashboard
