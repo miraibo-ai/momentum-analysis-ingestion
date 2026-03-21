@@ -32,7 +32,7 @@ services:
       PREFECT_API_SERVICES_LIFESPAN_TIMEOUT: 100
     command: prefect server start
     healthcheck:
-      test: CMD-SHELL python3 -c "import urllib.request as u; u.urlopen('http://localhost:4200/api/health', timeout=1)"
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:4200/api/health', timeout=1)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -51,14 +51,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       PREFECT_API_URL: http://server:4200/api
-    command: >
-      sh -c "
-        echo 'Waiting for server to be healthy...'
-        while ! curl -s -f http://server:4200/api/health > /dev/null; do
-          sleep 2
-        done
-        echo 'Server is healthy. Starting worker...'
-        prefect worker start --pool vm-pool --type docker
-      "
+    entrypoint:
+      - sh
+      - -c
+    command: |
+      echo 'Waiting for server to be healthy...'
+      while ! curl -s -f http://server:4200/api/health > /dev/null; do
+        sleep 2
+      done
+      echo 'Server is healthy. Starting worker...'
+      prefect worker start --pool vm-pool --type docker
 volumes:
   prefect_db:
