@@ -56,8 +56,8 @@ RUN useradd -m -u 1000 worker \
     && mkdir -p /opt/momentum-ops/ephemeral \
     && chown -R worker:worker /opt/momentum-ops
 
-ARG DOCKER_GID=999
-RUN groupadd -g $DOCKER_GID docker && usermod -aG docker worker
+ARG DOCKER_GID
+RUN echo "DOCKER_GID=$DOCKER_GID" > /dev/null && groupadd -g $DOCKER_GID docker && usermod -aG docker worker
 
 USER worker
 
