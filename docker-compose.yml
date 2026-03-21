@@ -51,10 +51,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       PREFECT_API_URL: http://server:4200/api
-    entrypoint:
-      - sh
-      - -c
-    command: |
-      echo 'Test connection to API...'
+    command: sh -c "echo 'Test command' && sleep 60"
 volumes:
   prefect_db:
