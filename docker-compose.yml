@@ -55,11 +55,6 @@ services:
       - sh
       - -c
     command: |
-      echo 'Waiting for server to be healthy...'
-      while ! curl -s -f http://server:4200/api/health > /dev/null; do
-        sleep 2
-      done
-      echo 'Server is healthy. Starting worker...'
-      prefect worker start --pool vm-pool --type docker
+      echo 'Test connection to API...'
 volumes:
   prefect_db:
