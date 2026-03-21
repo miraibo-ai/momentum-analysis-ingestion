@@ -1,2 +1,0 @@
-## fstab
-172.27.1.45:/mnt/Main/CodeBase/Miraibo/dev /home/eli/dev nfs _netdev,noauto,x-systemd.automount,x-systemd.idle-timeout=600,timeo=14,x-systemd.mount-timeout=10 0 0

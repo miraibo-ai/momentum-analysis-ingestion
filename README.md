@@ -18,4 +18,4 @@ python path/to/your_deployment_script.py
 
 prefect worker start --pool "vm-pool" --work-queue "market-data-ops"
 
- docker compose exec worker uv run python deploy_market_flows.pydoc
+docker compose exec worker uv run python deploy_market_flows.py
