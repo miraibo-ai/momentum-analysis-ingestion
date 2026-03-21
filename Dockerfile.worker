@@ -55,7 +55,12 @@ COPY deploy_market_flows.py ./
 RUN useradd -m -u 1000 worker \
     && mkdir -p /opt/momentum-ops/ephemeral \
     && chown -R worker:worker /opt/momentum-ops
+
+ARG DOCKER_GID=999
+RUN groupadd -g $DOCKER_GID docker && usermod -aG docker worker
+
 USER worker
+
 
 # ── Health check (Prefect worker exposes no HTTP; just verify Python) ────
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \

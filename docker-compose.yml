@@ -51,5 +51,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       PREFECT_API_URL: http://server:4200/api
+      DOCKER_GID: 999
 volumes:
   prefect_db:
