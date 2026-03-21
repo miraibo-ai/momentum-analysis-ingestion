@@ -11,6 +11,10 @@ The ingestion service is designed to be a standalone component that can be deplo
 -   **uv**: A fast Python package installer and resolver, used for managing dependencies.
 -   **PostgreSQL**: A PostgreSQL database is used to store the ingested data.
 
+## Architecture
+
+For a detailed explanation of the architecture, please see the [Architecture Overview](Docs/architecture.md) document.
+
 ## Getting Started
 
 ### Prerequisites
