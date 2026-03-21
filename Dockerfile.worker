@@ -65,3 +65,4 @@ HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
 # PREFECT_API_URL is set via docker-compose environment and inherited by
 # all flow-run subprocesses — no additional config step needed.
 ENTRYPOINT ["prefect", "worker", "start"]
+CMD ["--pool", "vm-pool", "--work-queue", "market-data-ops"]
