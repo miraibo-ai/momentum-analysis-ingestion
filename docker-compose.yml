@@ -43,7 +43,7 @@ services:
       context: .
       dockerfile: Dockerfile.worker
       args:
-        - DOCKER_GID=999
+        - DOCKER_GID=112
     image: momentum-worker
     restart: always
     depends_on:
