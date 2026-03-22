@@ -1,20 +1,51 @@
 # Architecture Overview
 
-This document provides a high-level overview of the `momentum-analysis-ingestion` service architecture.
+This document provides a high-level overview of the `momentum-analysis-ingestion` service architecture, covering data flow, runtime components, and the code-level structure of the Python modules.
+
+## Overall System Diagram
+
+This diagram illustrates the end-to-end flow of data, from external APIs through the ingestion service to the database.
+
+```mermaid
+graph TD
+    subgraph External Sources
+        direction LR
+        A[Financial APIs <br> e.g., yfinance]
+        B[Korean Investment & Securities API]
+    end
+
+    subgraph "Momentum Analysis Ingestion Service (Docker)"
+        direction TB
+        C(Prefect Worker) -- Fetches Data via --> D[ingestion/fetcher.py]
+        D -- Sends Raw Data to --> E[ingestion/flows.py]
+        E -- Triggers Analysis with --> F[models/FourModelPredictor]
+        F -- Uses Pre-trained Models --> G[model_artifacts/*.json]
+        E -- Persists All Data to --> H(PostgreSQL Database)
+    end
+
+    A --> C
+    B --> C
+
+    subgraph "Orchestration & Monitoring"
+        I[Prefect Server UI]
+    end
+
+    C -. Reports Status to .-> I
+```
 
 ## System Components & Deployment
 
-The service is composed of three main components, all running as Docker containers managed by Docker Compose:
+The entire service is orchestrated using Docker Compose, as defined in the `docker-compose.yml` file. It consists of three core services that run as Docker containers:
 
-1.  **Prefect Server:** The central hub for orchestrating and monitoring the data ingestion pipelines. It provides a UI for observing flow runs and their states.
+1.  **PostgreSQL Database (`db`):** An `alpine-postgres` container that provides persistent storage for all financial data, including raw prices, technical indicators, and model predictions. Its data is stored in a Docker volume to ensure durability across container restarts.
 
-2.  **Prefect Worker:** This component is responsible for executing the data ingestion flows. It polls the Prefect server for new flow runs and, upon receiving a work order, it spins up a new Docker container to execute the flow.
+2.  **Prefect Server (`server`):** This container runs the Prefect UI and backend API. It is the central hub for orchestrating, scheduling, and monitoring all data ingestion flows. It depends on the database being healthy before it starts.
 
-3.  **PostgreSQL Database:** A PostgreSQL database is used to store all the financial data ingested by the Prefect flows.
+3.  **Prefect Worker (`worker`):** This container is responsible for executing the actual ingestion tasks. It polls the Prefect Server for new flow runs to execute and uses a Docker-in-Docker setup to spin up ephemeral containers for each flow run. This isolates individual runs and ensures a clean execution environment.
 
-### Deployment Diagram
+### Runtime Orchestration Diagram
 
-The following diagram illustrates the interaction between the different runtime components of the system:
+The following diagram illustrates the interaction between the different runtime components as managed by Docker Compose.
 
 ```mermaid
 graph TD
