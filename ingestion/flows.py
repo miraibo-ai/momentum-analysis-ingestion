@@ -1,434 +1,429 @@
-# """
-# Prefect flows for market-data ingestion.
+"""
+Prefect flows for market-data ingestion.
 
-# Contains four top-level workflows:
-# 1. kis-token-renewal-flow : Renews the KIS API token daily.
-# 2. krx-realtime-flow      : High-frequency KIS minute data ingestion.
-# 3. daily-batch-flow       : End-of-day yfinance historical ingestion & ML inference.
-# 4. process-single-ticker  : Sub-flow for processing individual assets.
-# """
+Contains four top-level workflows:
+1. kis-token-renewal-flow : Renews the KIS API token daily.
+2. krx-realtime-flow      : High-frequency KIS minute data ingestion.
+3. daily-batch-flow       : End-of-day yfinance historical ingestion & ML inference.
+4. process-single-ticker  : Sub-flow for processing individual assets.
+"""
  
-# from __future__ import annotations
+from __future__ import annotations
 
-# import json
-# import logging
-# import pathlib
-# from datetime import date
-# from typing import Any, cast
+import json
+import logging
+import pathlib
+from datetime import date
+from typing import Any, cast
 
-# import pandas as pd
-# from prefect import flow, get_run_logger, task
-# from prefect.tasks import task_input_hash
+import pandas as pd
+from prefect import flow, get_run_logger, task
+from prefect.tasks import task_input_hash
 
-# from common.config import settings, to_yf_symbol
-# from common.database import get_connection
+from common.config import settings, to_yf_symbol
+from common.database import get_connection
 
-# # Unified Fetcher Imports
-# from ingestion.fetcher import DataFetcher, KISFetcher
+# Unified Fetcher Imports
+from ingestion.fetcher import DataFetcher, KISFetcher
 
-# # ML and Config Imports
-# from models.features import engineer_features
-# from models.models import FourModelPredictor, calculate_indicators
+# ML and Config Imports
+from models.features import engineer_features
+from models.models import FourModelPredictor, calculate_indicators
 
-# logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-# # Minimum daily rows before feature engineering is reliable.
-# MIN_HISTORY_ROWS: int = settings.min_history_rows
+# Minimum daily rows before feature engineering is reliable.
+MIN_HISTORY_ROWS: int = settings.min_history_rows
 
-# # ──────────────────────────────────────────────────────────────────────────────
-# # 1. SHARED UTILITIES
-# # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# 1. SHARED UTILITIES
+# ──────────────────────────────────────────────────────────────────────────────
 
-# @task(
-#     name="fetch-active-tickers",
-#     retries=2,
-#     retry_delay_seconds=10,
-#     description="Query the tickers table for all rows with is_active = true.",
-# )
-# def fetch_active_tickers() -> list[dict[str, str]]:
-#     """Return a list of active ticker dicts ({'symbol', 'region'}) from the database."""
-#     log = get_run_logger()
-#     query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
-#     with get_connection() as conn, conn.cursor() as cur:
-#         cur.execute(query)
-#         # Tell Pylance the row is a dict, since it can't infer the `dict_row` factory
-#         fetched_rows = cast(list[dict[str, Any]], cur.fetchall())
-#         tickers = [
-#             {"symbol": row["symbol"], "region": row["market_region"]}
-#             for row in fetched_rows
-#         ]
-#     log.info("Active tickers: %d found", len(tickers))
-#     return tickers
-
-
-# def _safe_float(value: Any) -> float | None:
-#     """Cast *value* to ``float``; return ``None`` for NaN / None."""
-#     if value is None or pd.isna(value):
-#         return None
-#     return float(value)
-
-# # ──────────────────────────────────────────────────────────────────────────────
-# # 2. KIS TOKEN RENEWAL FLOW
-# # ──────────────────────────────────────────────────────────────────────────────
-
-# @task(name="request-kis-token", retries=3, retry_delay_seconds=60)
-# def request_kis_token() -> dict[str, Any]:
-#     """Call the KIS OAuth endpoint and return the full token response."""
-#     import requests
-#     log = get_run_logger()
-#     url = f"{settings.kis_api_base_url}/oauth2/tokenP"
-#     payload = {
-#         "grant_type": "client_credentials",
-#         "appkey": settings.kis_app_key,
-#         "appsecret": settings.kis_app_secret,
-#     }
-#     resp = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=30)
-#     resp.raise_for_status()
-#     data = resp.json()
-#     log.info("KIS token obtained (expires: %s)", data.get("access_token_token_expired", "unknown"))
-#     return data
-
-# @task(name="save-kis-token")
-# def save_kis_token(token_data: dict[str, Any]) -> None:
-#     """Write *token_data* as JSON to disk."""
-#     log = get_run_logger()
-#     path = pathlib.Path(settings.kis_token_path)
-#     path.parent.mkdir(parents=True, exist_ok=True)
-#     path.write_text(json.dumps(token_data, indent=2, ensure_ascii=False))
-#     log.info("KIS token saved to %s", path)
-
-# @flow(name="kis-token-renewal-flow", log_prints=True)
-# def kis_token_renewal_flow() -> None:
-#     """Obtain a fresh KIS access token and save it to disk."""
-#     log = get_run_logger()
-#     if not settings.kis_app_key or not settings.kis_app_secret:
-#         log.error("KIS_APP_KEY / KIS_APP_SECRET not configured — skipping token renewal")
-#         return
-#     token_data = request_kis_token()
-#     save_kis_token(token_data)
-#     log.info("KIS token renewal complete")
+@task(
+    name="fetch-active-tickers",
+    retries=2,
+    retry_delay_seconds=10,
+    description="Query the tickers table for all rows with is_active = true.",
+)
+def fetch_active_tickers() -> list[dict[str, str]]:
+    """Return a list of active ticker dicts ({'symbol', 'region'}) from the database."""
+    log = get_run_logger()
+    query = "SELECT symbol, market_region FROM tickers WHERE is_active = true ORDER BY symbol"
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(query)
+        # Tell Pylance the row is a dict, since it can't infer the `dict_row` factory
+        fetched_rows = cast(list[dict[str, Any]], cur.fetchall())
+        tickers = [
+            {"symbol": row["symbol"], "region": row["market_region"]}
+            for row in fetched_rows
+        ]
+    log.info("Active tickers: %d found", len(tickers))
+    return tickers
 
 
-# # ──────────────────────────────────────────────────────────────────────────────
-# # 3. KRX REALTIME FLOW (KIS Minute Data Ingestion)
-# # ──────────────────────────────────────────────────────────────────────────────
+def _safe_float(value: Any) -> float | None:
+    """Cast *value* to ``float``; return ``None`` for NaN / None."""
+    if value is None or pd.isna(value):
+        return None
+    return float(value)
 
-# @task(name="load-kis-token")
-# def load_kis_token() -> str:
-#     """Load the token JSON generated by the daily renewal flow."""
-#     path = pathlib.Path(settings.kis_token_path)
-#     if not path.exists():
-#         raise FileNotFoundError(f"KIS token missing at {path}. Run kis-token-renewal-flow.")
+# ──────────────────────────────────────────────────────────────────────────────
+# 2. KIS TOKEN RENEWAL FLOW
+# ──────────────────────────────────────────────────────────────────────────────
 
-#     token_data = json.loads(path.read_text(encoding="utf-8"))
-#     access_token = token_data.get("access_token")
-#     if not access_token:
-#         raise ValueError("Invalid token file format: 'access_token' key missing.")
-#     return access_token
+@task(name="request-kis-token", retries=3, retry_delay_seconds=60)
+def request_kis_token() -> dict[str, Any]:
+    """Call the KIS OAuth endpoint and return the full token response."""
+    import requests
+    log = get_run_logger()
+    url = f"{settings.kis_api_base_url}/oauth2/tokenP"
+    payload = {
+        "grant_type": "client_credentials",
+        "appkey": settings.kis_app_key,
+        "appsecret": settings.kis_app_secret,
+    }
+    resp = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+    log.info("KIS token obtained (expires: %s)", data.get("access_token_token_expired", "unknown"))
+    return data
 
-# @task(name="fetch-and-store-kis-minute", retries=3, retry_delay_seconds=5)
-# def fetch_and_store_ticker(ticker: str, fetcher: KISFetcher) -> None:
-#     """Fetch 1-min OHLCV data from KIS and upsert into Postgres using psycopg3."""
-#     log = get_run_logger()
-#     df = fetcher.fetch_minute_data(ticker)
+@task(name="save-kis-token")
+def save_kis_token(token_data: dict[str, Any]) -> None:
+    """Write *token_data* as JSON to disk."""
+    log = get_run_logger()
+    path = pathlib.Path(settings.kis_token_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(token_data, indent=2, ensure_ascii=False))
+    log.info("KIS token saved to %s", path)
 
-#     if df is None or df.empty:
-#         log.warning("No minute data returned for %s.", ticker)
-#         return
+@flow(name="kis-token-renewal-flow", log_prints=True)
+def kis_token_renewal_flow() -> None:
+    """Obtain a fresh KIS access token and save it to disk."""
+    log = get_run_logger()
+    if not settings.kis_app_key or not settings.kis_app_secret:
+        log.error("KIS_APP_KEY / KIS_APP_SECRET not configured — skipping token renewal")
+        return
+    token_data = request_kis_token()
+    save_kis_token(token_data)
+    log.info("KIS token renewal complete")
 
-#     # Correctly parse timezone so psycopg3 converts it seamlessly to UTC for storage
-#     df['timestamp'] = pd.to_datetime(df['timestamp'])
-#     if df['timestamp'].dt.tz is None:
-#         df['timestamp'] = df['timestamp'].dt.tz_localize('Asia/Seoul')
-#     else:
-#         df['timestamp'] = df['timestamp'].dt.tz_convert('Asia/Seoul')
 
-#     # Prepare standard psycopg3 executemany payload
-#     rows = []
-#     for _, r in df.iterrows():
-#         acml = r.get("accumulated_value", 0)
-#         acml_val = 0.0 if pd.isna(acml) else float(acml)
+# ──────────────────────────────────────────────────────────────────────────────
+# 3. KRX REALTIME FLOW (KIS Minute Data Ingestion)
+# ──────────────────────────────────────────────────────────────────────────────
 
-#         rows.append((
-#             ticker,
-#             int(r["interval_min"]),
-#             r["timestamp"].to_pydatetime(), # Raw python datetime for strict DB typing
-#             float(r["open_price"]),
-#             float(r["high_price"]),
-#             float(r["low_price"]),
-#             float(r["close_price"]),
-#             int(r["volume"]),
-#             acml_val
-#         ))
+@task(name="load-kis-token")
+def load_kis_token() -> str:
+    """Load the token JSON generated by the daily renewal flow."""
+    path = pathlib.Path(settings.kis_token_path)
+    if not path.exists():
+        raise FileNotFoundError(f"KIS token missing at {path}. Run kis-token-renewal-flow.")
 
-#     query = """
-#         INSERT INTO price_minute_ohlcv_kr 
-#             (ticker, interval_min, timestamp, open_price, high_price, low_price, close_price, volume, accumulated_value)
-#         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-#         ON CONFLICT (ticker, interval_min, timestamp) DO NOTHING
-#     """
+    token_data = json.loads(path.read_text(encoding="utf-8"))
+    access_token = token_data.get("access_token")
+    if not access_token:
+        raise ValueError("Invalid token file format: 'access_token' key missing.")
+    return access_token
 
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.executemany(query, rows)
-#             inserted = cur.rowcount
-#         conn.commit()
+@task(name="fetch-and-store-kis-minute", retries=3, retry_delay_seconds=5)
+def fetch_and_store_ticker(ticker: str, fetcher: KISFetcher) -> None:
+    """Fetch 1-min OHLCV data from KIS and upsert into Postgres using psycopg3."""
+    log = get_run_logger()
+    df = fetcher.fetch_minute_data(ticker)
 
-#     log.info("Upserted minute data for %s. Evaluated %d rows, inserted %d.", ticker, len(rows), inserted)
+    if df is None or df.empty:
+        log.warning("No minute data returned for %s.", ticker)
+        return
 
-# @flow(name="krx-realtime-flow", log_prints=True)
-# def krx_realtime_flow() -> None:
-#     """High-frequency ingestion during KRX trading hours."""
-#     log = get_run_logger()
+    # Correctly parse timezone so psycopg3 converts it seamlessly to UTC for storage
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    if df['timestamp'].dt.tz is None:
+        df['timestamp'] = df['timestamp'].dt.tz_localize('Asia/Seoul')
+    else:
+        df['timestamp'] = df['timestamp'].dt.tz_convert('Asia/Seoul')
+
+    # Prepare standard psycopg3 executemany payload
+    rows = []
+    for _, r in df.iterrows():
+        acml = r.get("accumulated_value", 0)
+        acml_val = 0.0 if pd.isna(acml) else float(acml)
+
+        rows.append((
+            ticker,
+            int(r["interval_min"]),
+            r["timestamp"].to_pydatetime(), # Raw python datetime for strict DB typing
+            float(r["open_price"]),
+            float(r["high_price"]),
+            float(r["low_price"]),
+            float(r["close_price"]),
+            int(r["volume"]),
+            acml_val
+        ))
+
+    query = """
+        INSERT INTO price_minute_ohlcv_kr 
+            (ticker, interval_min, timestamp, open_price, high_price, low_price, close_price, volume, accumulated_value)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (ticker, interval_min, timestamp) DO NOTHING
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(query, rows)
+            inserted = cur.rowcount
+        conn.commit()
+
+    log.info("Upserted minute data for %s. Evaluated %d rows, inserted %d.", ticker, len(rows), inserted)
+
+@flow(name="krx-realtime-flow", log_prints=True)
+def krx_realtime_flow() -> None:
+    """High-frequency ingestion during KRX trading hours."""
+    log = get_run_logger()
     
-#     active_tickers = fetch_active_tickers()
-#     kr_tickers = [t["symbol"] for t in active_tickers if t["region"] == "KR"]
+    active_tickers = fetch_active_tickers()
+    kr_tickers = [t["symbol"] for t in active_tickers if t["region"] == "KR"]
     
-#     if not kr_tickers:
-#         log.warning("No active KR tickers found — aborting minute ingestion.")
-#         return
+    if not kr_tickers:
+        log.warning("No active KR tickers found — aborting minute ingestion.")
+        return
     
-#     active_token = load_kis_token()
-#     if not settings.kis_app_key or not settings.kis_app_secret:
-#         raise ValueError("KIS API key and secret must be set in settings.")
+    active_token = load_kis_token()
+    if not settings.kis_app_key or not settings.kis_app_secret:
+        raise ValueError("KIS API key and secret must be set in settings.")
         
-#     fetcher = KISFetcher(
-#         api_key=settings.kis_app_key,
-#         api_secret=settings.kis_app_secret,
-#         token=active_token
-#     )
+    fetcher = KISFetcher(
+        api_key=settings.kis_app_key,
+        api_secret=settings.kis_app_secret,
+        token=active_token
+    )
     
-#     log.info("Starting KRX realtime cycle for %d KR tickers.", len(kr_tickers))
-#     for ticker in kr_tickers:
-#         fetch_and_store_ticker(ticker, fetcher)
+    log.info("Starting KRX realtime cycle for %d KR tickers.", len(kr_tickers))
+    for ticker in kr_tickers:
+        fetch_and_store_ticker(ticker, fetcher)
     
-#     log.info("KRX realtime cycle complete.")
+    log.info("KRX realtime cycle complete.")
 
 
-# # ──────────────────────────────────────────────────────────────────────────────
-# # 4. DAILY BATCH FLOW (YFinance + ML Inference)
-# # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# 4. DAILY BATCH FLOW (YFinance + ML Inference)
+# ──────────────────────────────────────────────────────────────────────────────
 
-# @task(name="fetch-yfinance-daily", 
-#       retries=3, 
-#       retry_delay_seconds=30, 
-#       cache_key_fn=task_input_hash, 
-#       cache_expiration=pd.Timedelta(hours=1))
-# def fetch_yfinance_daily(yf_symbol: str, period: str = "3mo") -> pd.DataFrame | None:
-#     log = get_run_logger()
-#     fetcher = DataFetcher(yf_symbol)
-#     df = fetcher.fetch_daily_data(period=period)
-#     if df is None or df.empty:
-#         log.warning("No daily data returned for %s", yf_symbol)
-#         return None
-#     return df
+@task(name="fetch-yfinance-daily", 
+      retries=3, 
+      retry_delay_seconds=30, 
+      cache_key_fn=task_input_hash, 
+      cache_expiration=pd.Timedelta(hours=1))
+def fetch_yfinance_daily(yf_symbol: str, period: str = "3mo") -> pd.DataFrame | None:
+    log = get_run_logger()
+    fetcher = DataFetcher(yf_symbol)
+    df = fetcher.fetch_daily_data(period=period)
+    if df is None or df.empty:
+        log.warning("No daily data returned for %s", yf_symbol)
+        return None
+    return df
 
-# @task(name="fetch-yfinance-realtime", retries=2, retry_delay_seconds=15)
-# def fetch_yfinance_realtime(yf_symbol: str) -> dict[str, Any] | None:
-#     log = get_run_logger()
-#     data = DataFetcher(yf_symbol).fetch_realtime_data()
-#     if data is None:
-#         log.warning("No realtime data for %s", yf_symbol)
-#     return data
+@task(name="fetch-yfinance-realtime", retries=2, retry_delay_seconds=15)
+def fetch_yfinance_realtime(yf_symbol: str) -> dict[str, Any] | None:
+    log = get_run_logger()
+    data = DataFetcher(yf_symbol).fetch_realtime_data()
+    if data is None:
+        log.warning("No realtime data for %s", yf_symbol)
+    return data
 
-# @task(name="upsert-daily-prices", retries=2, retry_delay_seconds=10)
-# def upsert_daily_prices(ticker: str, region: str, df: pd.DataFrame) -> int:
-#     log = get_run_logger()
-#     rows = [
-#         (ticker, region, r["Date"].date(), float(r["Open"]), float(r["High"]),
-#          float(r["Low"]), float(r["Close"]), float(r["Close"]), int(r["Volume"]))
-#         for _, r in df.iterrows()
-#     ]
-#     query = """
-#         INSERT INTO price_daily (ticker, 
-#                                 region, 
-#                                 date, 
-#                                 open, 
-#                                 high, 
-#                                 low, 
-#                                 close, 
-#                                 adj_close, 
-#                                 volume)
-#         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-#         ON CONFLICT (ticker, date) DO UPDATE SET
-#             region = EXCLUDED.region, 
-#             open = EXCLUDED.open, 
-#             high = EXCLUDED.high,
-#             low = EXCLUDED.low, 
-#             close = EXCLUDED.close, 
-#             adj_close = EXCLUDED.adj_close, 
-#             volume = EXCLUDED.volume
-#     """
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.executemany(query, rows)
-#             row_count = cur.rowcount
-#         conn.commit()
+@task(name="upsert-daily-prices", retries=2, retry_delay_seconds=10)
+def upsert_daily_prices(ticker: str, region: str, df: pd.DataFrame) -> int:
+    log = get_run_logger()
+    rows = [
+        (ticker, region, r["Date"].date(), float(r["Open"]), float(r["High"]),
+         float(r["Low"]), float(r["Close"]), float(r["Close"]), int(r["Volume"]))
+        for _, r in df.iterrows()
+    ]
+    query = """
+        INSERT INTO price_daily (ticker, 
+                                region, 
+                                date, 
+                                open, 
+                                high, 
+                                low, 
+                                close, 
+                                adj_close, 
+                                volume)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (ticker, date) DO UPDATE SET
+            region = EXCLUDED.region, 
+            open = EXCLUDED.open, 
+            high = EXCLUDED.high,
+            low = EXCLUDED.low, 
+            close = EXCLUDED.close, 
+            adj_close = EXCLUDED.adj_close, 
+            volume = EXCLUDED.volume
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.executemany(query, rows)
+            row_count = cur.rowcount
+        conn.commit()
 
-#     if row_count == 0:
-#         log.warning(f"{ticker}: Database reported 0 rows affected during daily upsert.")
-#     return row_count
+    if row_count == 0:
+        log.warning(f"{ticker}: Database reported 0 rows affected during daily upsert.")
+    return row_count
 
-# @task(name="upsert-realtime-price", retries=2, retry_delay_seconds=10)
-# def upsert_realtime_price(data: dict[str, Any]) -> None:
-#     query = """
-#         INSERT INTO price_minute_ohlcv (ticker, 
-#                                     region, 
-#                                     timestamp, 
-#                                     open, 
-#                                     high, 
-#                                     low, 
-#                                     close, 
-#                                     volume)
-#         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-#         ON CONFLICT (ticker, timestamp) DO UPDATE SET
-#             region = EXCLUDED.region, 
-#             open = EXCLUDED.open, 
-#             high = EXCLUDED.high,
-#             low = EXCLUDED.low, 
-#             close = EXCLUDED.close, 
-#             volume = EXCLUDED.volume
-#     """
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute(query, (data["ticker"], 
-#                                 data["region"], 
-#                                 data["timestamp"], 
-#                                 data["open"], 
-#                                 data["high"], 
-#                                 data["low"], 
-#                                 data["close"], 
-#                                 data["volume"]))
-#         conn.commit()
+@task(name="upsert-realtime-price", retries=2, retry_delay_seconds=10)
+def upsert_realtime_price(data: dict[str, Any]) -> None:
+    query = """
+        INSERT INTO price_minute_ohlcv (ticker, 
+                                    region, 
+                                    timestamp, 
+                                    open, 
+                                    high, 
+                                    low, 
+                                    close, 
+                                    volume)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (ticker, timestamp) DO UPDATE SET
+            region = EXCLUDED.region, 
+            open = EXCLUDED.open, 
+            high = EXCLUDED.high,
+            low = EXCLUDED.low, 
+            close = EXCLUDED.close, 
+            volume = EXCLUDED.volume
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (data["ticker"], 
+                                data["region"], 
+                                data["timestamp"], 
+                                data["open"], 
+                                data["high"], 
+                                data["low"], 
+                                data["close"], 
+                                data["volume"]))
+        conn.commit()
 
-# @task(name="backfill-if-needed", retries=2, retry_delay_seconds=30)
-# def backfill_if_needed(ticker: str, region: str, yf_symbol: str) -> None:
-#     log = get_run_logger()
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute("SELECT COUNT(*) AS cnt FROM price_daily WHERE ticker = %s", (ticker,))
-#             row = cast(dict[str, Any] | None, cur.fetchone())
-#             existing: int = row["cnt"] if row else 0
+@task(name="backfill-if-needed", retries=2, retry_delay_seconds=30)
+def backfill_if_needed(ticker: str, region: str, yf_symbol: str) -> None:
+    log = get_run_logger()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS cnt FROM price_daily WHERE ticker = %s", (ticker,))
+            row = cast(dict[str, Any] | None, cur.fetchone())
+            existing: int = row["cnt"] if row else 0
 
-#     if existing < MIN_HISTORY_ROWS:
-#         log.info("%s has %d rows (need %d) — backfilling max history", ticker, existing, MIN_HISTORY_ROWS)
-#         full_df = fetch_yfinance_daily.fn(yf_symbol, period="max")
-#         if full_df is not None and not full_df.empty:
-#             upsert_daily_prices.fn(ticker, region, full_df)
+    if existing < MIN_HISTORY_ROWS:
+        log.info("%s has %d rows (need %d) — backfilling max history", ticker, existing, MIN_HISTORY_ROWS)
+        full_df = fetch_yfinance_daily.fn(yf_symbol, period="max")
+        if full_df is not None and not full_df.empty:
+            upsert_daily_prices.fn(ticker, region, full_df)
 
-# @task(name="run-inference-and-persist", retries=1, retry_delay_seconds=5)
-# def run_inference_and_persist(ticker: str, region: str, daily_df: pd.DataFrame) -> None:
-#     log = get_run_logger()
-#     features = engineer_features(daily_df)
-#     indicators = calculate_indicators(daily_df)
+@task(name="run-inference-and-persist", retries=1, retry_delay_seconds=5)
+def run_inference_and_persist(ticker: str, region: str, daily_df: pd.DataFrame) -> None:
+    log = get_run_logger()
+    features = engineer_features(daily_df)
+    indicators = calculate_indicators(daily_df)
 
-#     if indicators.empty:
-#         log.warning("%s — indicators are empty; skipping analysis upsert", ticker)
-#         return
+    if indicators.empty:
+        log.warning("%s — indicators are empty; skipping analysis upsert", ticker)
+        return
 
-#     predictor = FourModelPredictor()
-#     model_probs, model_contribs = predictor.predict_from_ohlcv(daily_df)
+    predictor = FourModelPredictor()
+    model_probs, model_contribs = predictor.predict_from_ohlcv(daily_df)
 
-#     def _contrib_json(key: str) -> str | None:
-#         c = model_contribs.get(key)
-#         return json.dumps(c) if c else None
+    def _contrib_json(key: str) -> str | None:
+        c = model_contribs.get(key)
+        return json.dumps(c) if c else None
 
-#     latest_idx = indicators.index[-1]
-#     latest_date: date = cast(pd.Timestamp, daily_df.loc[latest_idx, "Date"]).date()
-#     latest_features = features.loc[latest_idx] if latest_idx in features.index else None
+    latest_idx = indicators.index[-1]
+    latest_date: date = cast(pd.Timestamp, daily_df.loc[latest_idx, "Date"]).date()
+    latest_features = features.loc[latest_idx] if latest_idx in features.index else None
 
-#     query = """
-#         INSERT INTO analysis_info (
-#             ticker, region, date, rsi, macd, macd_signal, macd_hist,
-#             bb_upper, bb_middle, bb_lower, prob_active_1w, prob_conservative_1mo,
-#             prob_conservative_6mo, prob_experimental, features_active_1w,
-#             features_conservative_1mo, features_conservative_6mo, features_experimental
-#         ) VALUES (
-#             %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-#         )
-#         ON CONFLICT (ticker, date) DO UPDATE SET
-#             region = EXCLUDED.region, rsi = EXCLUDED.rsi, macd = EXCLUDED.macd,
-#             macd_signal = EXCLUDED.macd_signal, macd_hist = EXCLUDED.macd_hist,
-#             bb_upper = EXCLUDED.bb_upper, bb_middle = EXCLUDED.bb_middle, bb_lower = EXCLUDED.bb_lower,
-#             prob_active_1w = EXCLUDED.prob_active_1w, prob_conservative_1mo = EXCLUDED.prob_conservative_1mo,
-#             prob_conservative_6mo = EXCLUDED.prob_conservative_6mo, prob_experimental = EXCLUDED.prob_experimental,
-#             features_active_1w = EXCLUDED.features_active_1w, features_conservative_1mo = EXCLUDED.features_conservative_1mo,
-#             features_conservative_6mo = EXCLUDED.features_conservative_6mo, features_experimental = EXCLUDED.features_experimental
-#     """
-#     params = (
-#         ticker, region, latest_date,
-#         _safe_float(indicators.loc[latest_idx, "RSI"]) if "RSI" in indicators.columns else None,
-#         _safe_float(indicators.loc[latest_idx, "MACD"]) if "MACD" in indicators.columns else None,
-#         _safe_float(indicators.loc[latest_idx, "MACD_signal"]) if "MACD_signal" in indicators.columns else None,
-#         _safe_float(indicators.loc[latest_idx, "MACD_hist"]) if "MACD_hist" in indicators.columns else None,
-#         _safe_float(latest_features["bb_upper"]) if latest_features is not None else None,
-#         _safe_float(latest_features["bb_middle"]) if latest_features is not None else None,
-#         _safe_float(latest_features["bb_lower"]) if latest_features is not None else None,
-#         model_probs.get("active_1w"), model_probs.get("conservative_1mo"),
-#         model_probs.get("conservative_6mo"), model_probs.get("experimental"),
-#         _contrib_json("active_1w"), _contrib_json("conservative_1mo"),
-#         _contrib_json("conservative_6mo"), _contrib_json("experimental"),
-#     )
+    query = """
+        INSERT INTO analysis_info (
+            ticker, region, date, rsi, macd, macd_signal, macd_hist,
+            bb_upper, bb_middle, bb_lower, prob_active_1w, prob_conservative_1mo,
+            prob_conservative_6mo, prob_experimental, features_active_1w,
+            features_conservative_1mo, features_conservative_6mo, features_experimental
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (ticker, date) DO UPDATE SET
+            region = EXCLUDED.region, rsi = EXCLUDED.rsi, macd = EXCLUDED.macd,
+            macd_signal = EXCLUDED.macd_signal, macd_hist = EXCLUDED.macd_hist,
+            bb_upper = EXCLUDED.bb_upper, bb_middle = EXCLUDED.bb_middle, bb_lower = EXCLUDED.bb_lower,
+            prob_active_1w = EXCLUDED.prob_active_1w, prob_conservative_1mo = EXCLUDED.prob_conservative_1mo,
+            prob_conservative_6mo = EXCLUDED.prob_conservative_6mo, prob_experimental = EXCLUDED.prob_experimental,
+            features_active_1w = EXCLUDED.features_active_1w, features_conservative_1mo = EXCLUDED.features_conservative_1mo,
+            features_conservative_6mo = EXCLUDED.features_conservative_6mo, features_experimental = EXCLUDED.features_experimental
+    """
+    params = (
+        ticker, region, latest_date,
+        _safe_float(indicators.loc[latest_idx, "RSI"]) if "RSI" in indicators.columns else None,
+        _safe_float(indicators.loc[latest_idx, "MACD"]) if "MACD" in indicators.columns else None,
+        _safe_float(indicators.loc[latest_idx, "MACD_signal"]) if "MACD_signal" in indicators.columns else None,
+        _safe_float(indicators.loc[latest_idx, "MACD_hist"]) if "MACD_hist" in indicators.columns else None,
+        _safe_float(latest_features["bb_upper"]) if latest_features is not None else None,
+        _safe_float(latest_features["bb_middle"]) if latest_features is not None else None,
+        _safe_float(latest_features["bb_lower"]) if latest_features is not None else None,
+        model_probs.get("active_1w"), model_probs.get("conservative_1mo"),
+        model_probs.get("conservative_6mo"), model_probs.get("experimental"),
+        _contrib_json("active_1w"), _contrib_json("conservative_1mo"),
+        _contrib_json("conservative_6mo"), _contrib_json("experimental"),
+    )
 
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute(query, params)
-#         conn.commit()
-#     log.info("%s — analysis row persisted for %s", ticker, latest_date)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+        conn.commit()
+    log.info("%s — analysis row persisted for %s", ticker, latest_date)
 
-# @task(name="verify_insertion")
-# def verify_insertion(ticker: str, table: str):
-#     log = get_run_logger()
-#     query = f"SELECT MAX(date) FROM {table} WHERE ticker = %s"
-#     with get_connection() as conn:
-#         with conn.cursor() as cur:
-#             cur.execute(query, (ticker,))
-#             res = cur.fetchone()
-#             log.info(f"Latest record in {table} for {ticker}: {res}")
+@task(name="verify_insertion")
+def verify_insertion(ticker: str, table: str):
+    log = get_run_logger()
+    query = f"SELECT MAX(date) FROM {table} WHERE ticker = %s"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (ticker,))
+            res = cur.fetchone()
+            log.info(f"Latest record in {table} for {ticker}: {res}")
 
-# @flow(name="process-single-ticker", log_prints=True, retries=1, retry_delay_seconds=30)
-# def process_single_ticker(ticker: str, region: str, include_realtime: bool = True) -> None:
-#     yf_sym = to_yf_symbol(ticker, region)
+@flow(name="process-single-ticker", log_prints=True, retries=1, retry_delay_seconds=30)
+def process_single_ticker(ticker: str, region: str, include_realtime: bool = True) -> None:
+    yf_sym = to_yf_symbol(ticker, region)
 
-#     backfill_if_needed(ticker, region, yf_sym)
+    backfill_if_needed(ticker, region, yf_sym)
 
-#     daily_df = fetch_yfinance_daily(yf_sym, period="3mo")
-#     if daily_df is not None and not daily_df.empty:
-#         upsert_daily_prices(ticker, region, daily_df)
-#         run_inference_and_persist(ticker, region, daily_df)
-#         verify_insertion(ticker, "price_daily")
+    daily_df = fetch_yfinance_daily(yf_sym, period="3mo")
+    if daily_df is not None and not daily_df.empty:
+        upsert_daily_prices(ticker, region, daily_df)
+        run_inference_and_persist(ticker, region, daily_df)
+        verify_insertion(ticker, "price_daily")
 
-#     # Optional yfinance realtime fetch (e.g. for US markets)
-#     if include_realtime:
-#         rt_data = fetch_yfinance_realtime(yf_sym)
-#         if rt_data is not None:
-#             rt_data["ticker"] = ticker
-#             rt_data["region"] = region
-#             upsert_realtime_price(rt_data)
+    # Optional yfinance realtime fetch (e.g. for US markets)
+    if include_realtime:
+        rt_data = fetch_yfinance_realtime(yf_sym)
+        if rt_data is not None:
+            rt_data["ticker"] = ticker
+            rt_data["region"] = region
+            upsert_realtime_price(rt_data)
 
-# @flow(name="daily-batch-flow", log_prints=True)
-# def daily_batch_flow() -> None:
-#     """Run full ingestion + inference for every active ticker."""
-#     log = get_run_logger()
-#     tickers = fetch_active_tickers()
-#     if not tickers:
-#         log.warning("No active tickers — nothing to do")
-#         return
+@flow(name="daily-batch-flow", log_prints=True)
+def daily_batch_flow() -> None:
+    """Run full ingestion + inference for every active ticker."""
+    log = get_run_logger()
+    tickers = fetch_active_tickers()
+    if not tickers:
+        log.warning("No active tickers — nothing to do")
+        return
 
-#     log.info("Daily batch cycle — %d tickers", len(tickers))
-#     for t in tickers:
-#         process_single_ticker(t["symbol"], t["region"], include_realtime=False)
-#     log.info("Daily batch cycle complete")
+    log.info("Daily batch cycle — %d tickers", len(tickers))
+    for t in tickers:
+        process_single_ticker(t["symbol"], t["region"], include_realtime=False)
+    log.info("Daily batch cycle complete")
 
 
-# # ──────────────────────────────────────────────────────────────────────────────
-# # CLI execution
-# # ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────────
+# CLI execution
+# ──────────────────────────────────────────────────────────────────────────────
 
-# if __name__ == "__main__":
-#     daily_batch_flow()
-
-import socket
-
-hostname = socket.gethostname()
-print(f"[deploy.py] Running on host: {hostname}")
+if __name__ == "__main__":
+    daily_batch_flow()
