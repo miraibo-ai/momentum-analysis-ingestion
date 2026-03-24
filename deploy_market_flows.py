@@ -12,6 +12,7 @@ def deploy_market_ops():
     common_args = {
         "work_pool_name": "vm-pool",
         "image": "momentum-worker",
+        "image_pull_policy": "NEVER",
         "push": False,
     }
 
