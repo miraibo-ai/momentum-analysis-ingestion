@@ -44,14 +44,14 @@ COPY pyproject.toml uv.lock ./
 # Using uv sync with the lockfile ensures the worker environment has the
 # exact same dependencies as the server, preventing conflicts. This installs
 # all dependencies from uv.lock but not the project itself.
-RUN uv sync --frozen --system --no-install-project --no-dev
+RUN uv sync --frozen --no-install-project --no-dev
 
 # ── Copy application source ──────────────────────────────────────────────
 COPY . .
 
 # ── Install project source ───────────────────────────────────────────────
 # This installs the project itself, making packages like 'ingestion' importable.
-RUN uv sync --frozen --system --no-dev
+RUN uv sync --frozen --no-dev
 
 # ── Create non-root user ─────────────────────────────────────────────────
 RUN useradd -m -u 1000 worker \
