@@ -12,7 +12,7 @@
 #   docker run --env-file .env momentum-ops:worker
 # ─────────────────────────────────────────────────────────────────────────────
 
-FROM python:3.13-slim AS base
+FROM astral/uv:python3.13-bookworm-slim AS base
 
 # ── Metadata ──────────────────────────────────────────────────────────────
 LABEL maintainer="Momentum Ops Team"
@@ -33,9 +33,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# ── Install uv via official standalone installer ─────────────────────────
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # ── Copy dependency metadata for layer caching ───────────────────────────
 COPY pyproject.toml uv.lock ./
