@@ -21,8 +21,8 @@ LABEL description="Prefect ingestion worker for momentum-ops"
 # ── Environment ───────────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    # uv: install into system Python, no venv
-    UV_SYSTEM_INSTALL=1
+    # Let uv manage the virtual environment and add it to the PATH
+    PATH="/opt/momentum-ops/.venv/bin:$PATH"
 
 WORKDIR /opt/momentum-ops
 
