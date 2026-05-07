@@ -1,27 +1,24 @@
-# Use the official uv image for the build stage
-FROM astral/uv:python3.13-bookworm-slim AS builder
+# Dockerfile
+FROM python:3.12-slim
 
-# 1. Setup working directory
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Set working directory
 WORKDIR /app
 
-# 2. Optimization: Enable bytecode compilation and use 'copy' mode
-# (Hardlinks don't work across Docker layers)
-ENV UV_COMPILE_BYTECODE=1
-ENV UV_LINK_MODE=copy
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
 
-# 3. Cache dependencies: Copy only the lockfile and project metadata first
-# This layer is ONLY rebuilt if your dependencies change.
-COPY uv.lock pyproject.toml ./
-RUN uv sync --frozen --all-extras --no-install-project --no-dev
+# Install dependencies (frozen)
+RUN uv sync --frozen
 
-# 4. Copy the rest of your Miraiibo source code
-ADD . /app
+# Copy source code
+COPY src/ ./src/
+COPY README.md ./
 
-# 5. Final sync: Install the actual project (Miraiibo/momentum-ops)
-RUN uv sync --frozen --all-extras --no-dev
-
-# 6. Set the path so 'prefect' and other tools work directly
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Default command for your Prefect server
-CMD ["prefect", "server", "start", "--host", "0.0.0.0"]
+# Entrypoint is defined in docker-compose.yml

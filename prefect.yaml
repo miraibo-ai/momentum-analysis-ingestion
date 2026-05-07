@@ -1,0 +1,35 @@
+# prefect.yaml
+name: momentum-ops
+prefect-version: 3.1.0
+
+# build section allows you to manage and package your code
+build:
+- prefect.deployments.steps.run_shell_command:
+    id: install-deps
+    command: uv sync
+
+# push section allows you to manage where your code is stored
+push: null
+
+# pull section allows you to manage how your code is retrieved on the worker
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /app
+
+# deployments section allows you to define multiple deployments
+deployments:
+- name: realtime-kr-ingestion
+  entrypoint: src/flows/realtime_kr.py:realtime_kr_ingestion
+  work_pool:
+    name: ${WORKER_POOL_NAME:-momentum-worker-pool}
+  schedule:
+    interval: 60 # every 1 minute
+  parameters: {}
+
+- name: batch-jp-ingestion
+  entrypoint: src/flows/batch_jp.py:batch_jp_ingestion
+  work_pool:
+    name: ${WORKER_POOL_NAME:-momentum-worker-pool}
+  schedule:
+    cron: "0 18 * * 1-5" # 6 PM JST (roughly) Mon-Fri
+  parameters: {}

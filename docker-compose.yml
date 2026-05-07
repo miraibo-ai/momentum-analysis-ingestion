@@ -1,58 +1,21 @@
 services:
-  db:
-    image: postgres:18-alpine
-    restart: always
-    environment:
-      POSTGRES_USER: prefect
-      POSTGRES_PASSWORD: test_pass
-      POSTGRES_DB: prefect
-    volumes:
-      - prefect_db:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U prefect"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  server:
+  momentum-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    image: momentum-server
+    container_name: momentum-ingestion-worker
     restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "4200:4200"
-    environment:
-      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:test_pass@db:5432/prefect
-      PREFECT_SERVER_API_HOST: 0.0.0.0
-      PREFECT_SERVER_UI_API_URL: http://172.27.100.200:4200/api
-      PREFECT_API_SERVICES_LIFESPAN_TIMEOUT: 100
-    command: prefect server start
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:4200/api/health', timeout=1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-      args:
-        - DOCKER_GID=112
-    image: momentum-worker
-    restart: always
-    depends_on:
-      server:
-        condition: service_healthy
+    env_file:
+      - .env
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./src:/app/src
     environment:
-      PREFECT_API_URL: http://172.27.100.200:4200/api
-      DOCKER_GID: 999
-volumes:
-  prefect_db:
+      - PREFECT_API_URL=${PREFECT_API_URL}
+      - PREFECT_API_KEY=${PREFECT_API_KEY}
+    command: >
+      bash -c "uv run prefect worker start --pool '${WORKER_POOL_NAME:-momentum-worker-pool}'"
+
+networks:
+  default:
+    name: momentum-network
+    external: false
